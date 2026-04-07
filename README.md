@@ -16,8 +16,6 @@
 >
 > <br>
 
-![8-bit banner](https://gamelocpm.netlify.app/)
-
 </div>
 
 ---
