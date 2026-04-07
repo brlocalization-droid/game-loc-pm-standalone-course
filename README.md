@@ -16,7 +16,7 @@
 >
 > <br>
 
-![8-bit banner](https://readme-typing-svg.demolab.com?font=Press+Start+2P&size=14&pause=1000&color=00FF41&center=true&vCenter=true&width=700&lines=PRESS+START+TO+BEGIN...;50+LESSONS+UNLOCKED;10+MODULES+TO+CONQUER;BILINGUAL+EN+%2F+PT-BR;NO+INSTALL+REQUIRED!)
+![8-bit banner](https://gamelocpm.netlify.app/)
 
 </div>
 
