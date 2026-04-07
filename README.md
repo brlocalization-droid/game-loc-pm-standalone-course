@@ -16,6 +16,8 @@
 >
 > <br>
 
+https://gamelocpm.netlify.app/
+
 </div>
 
 ---
