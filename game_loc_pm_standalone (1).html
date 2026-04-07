@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game Loc PM — From Kickoff to Gold Master</title>
+<meta name="description" content="Interactive 8-bit course on game localization project management. 50 lessons, 10 modules, mini-games, bilingual EN/PT-BR.">
+<meta property="og:title" content="Game Loc PM — From Kickoff to Gold Master">
+<meta property="og:description" content="Master game localization project management with this interactive RPG-style course.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
+<style>
+  html, body, #root { margin: 0; padding: 0; min-height: 100vh; background: #0d1117; }
+  * { -webkit-tap-highlight-color: transparent; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+
+const STORAGE_KEY = "glpm-save-v2";
+const db = {
+  async load() { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch { return null; } },
+  async save(d) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {} }
+};
+
+let audioCtx = null;
+const getAudio = () => { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); return audioCtx; };
+const beep = (f, d, t = "square", v = 0.07) => { try { const c = getAudio(), o = c.createOscillator(), g = c.createGain(); o.type = t; o.frequency.value = f; g.gain.setValueAtTime(v, c.currentTime); g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + d); o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime + d); } catch {} };
+const SFX = {
+  click: () => beep(800, 0.06), xp: () => { beep(523, 0.08); setTimeout(() => beep(659, 0.08), 80); setTimeout(() => beep(784, 0.12), 160); },
+  correct: () => { beep(523, 0.1); setTimeout(() => beep(659, 0.1), 100); setTimeout(() => beep(784, 0.1), 200); setTimeout(() => beep(1047, 0.2), 300); },
+  wrong: () => { beep(200, 0.15, "sawtooth"); setTimeout(() => beep(150, 0.2, "sawtooth"), 150); },
+  levelUp: () => { [523, 659, 784, 1047, 1319].forEach((f, i) => setTimeout(() => beep(f, 0.15, "square", 0.1), i * 100)); },
+  achieve: () => { [784, 988, 1175, 1319, 1568].forEach((f, i) => setTimeout(() => beep(f, 0.12, "triangle", 0.1), i * 80)); },
+  complete: () => { beep(440, 0.1); setTimeout(() => beep(554, 0.1), 120); setTimeout(() => beep(659, 0.15), 240); },
+  bonus: () => { [1047, 1319, 1568, 2093].forEach((f, i) => setTimeout(() => beep(f, 0.1, "triangle", 0.08), i * 70)); },
+};
+
+const LEVELS = [
+  { xp: 0, en: "Intern", pt: "Estagiário", icon: "📋" }, { xp: 200, en: "Junior PM", pt: "PM Júnior", icon: "📎" },
+  { xp: 450, en: "Project Manager", pt: "Project Manager", icon: "📊" }, { xp: 750, en: "Senior PM", pt: "PM Sênior", icon: "⚡" },
+  { xp: 1100, en: "Lead PM", pt: "PM Lead", icon: "🌟" }, { xp: 1500, en: "Loc Manager", pt: "Loc Manager", icon: "👑" },
+  { xp: 2000, en: "Head of Loc", pt: "Head de Loc", icon: "🏰" }, { xp: 2600, en: "VP Localization", pt: "VP Localização", icon: "🔮" },
+  { xp: 3300, en: "Legendary PM", pt: "PM Lendário", icon: "💎" }, { xp: 4000, en: "Game Loc Master", pt: "Mestre de Loc", icon: "🐉" },
+];
+const getLevel = (xp) => { let l = 0; for (let i = LEVELS.length - 1; i >= 0; i--) if (xp >= LEVELS[i].xp) { l = i; break; } return l; };
+const getLvlProg = (xp) => { const l = getLevel(xp), c = LEVELS[l].xp, n = l < LEVELS.length - 1 ? LEVELS[l + 1].xp : LEVELS[l].xp + 500; return { cur: xp - c, need: n - c, level: l }; };
+
+const ACHIEVEMENTS = [
+  { id: "first_lesson", en: "First Steps", pt: "Primeiros Passos", icon: "👣" },
+  { id: "mod_1", en: "Ecosystem Explorer", pt: "Explorador", icon: "🌍" },
+  { id: "mod_2", en: "Anatomist", pt: "Anatomista", icon: "🔬" },
+  { id: "mod_3", en: "Tool Master", pt: "Ferramenteiro", icon: "🛠️" },
+  { id: "mod_4", en: "Quote Machine", pt: "Máquina de Quotes", icon: "💰" },
+  { id: "mod_5", en: "Kickoff King", pt: "Rei do Kickoff", icon: "🚀" },
+  { id: "mod_6", en: "Production Pro", pt: "Pro de Produção", icon: "⚡" },
+  { id: "mod_7", en: "Quality Guardian", pt: "Guardião da Qualidade", icon: "🛡️" },
+  { id: "mod_8", en: "Voice Commander", pt: "Comandante de Vozes", icon: "🎙️" },
+  { id: "mod_9", en: "Firefighter", pt: "Bombeiro de Projetos", icon: "🔥" },
+  { id: "mod_10", en: "Course Complete!", pt: "Curso Completo!", icon: "🏆" },
+  { id: "quiz_perfect", en: "Flawless Victory", pt: "Vitória Perfeita", icon: "⚔️" },
+  { id: "five_streak", en: "On a Roll", pt: "Embalado", icon: "🔥" },
+  { id: "halfway", en: "Halfway Hero", pt: "Herói da Metade", icon: "🗺️" },
+  { id: "level_5", en: "Senior Status", pt: "Status Sênior", icon: "🌟" },
+  { id: "minigame_1", en: "Term Slayer", pt: "Caçador de Termos", icon: "📚" },
+  { id: "minigame_2", en: "Risk Spotter", pt: "Detector de Riscos", icon: "🔍" },
+  { id: "speed_demon", en: "Speed Demon", pt: "Demônio da Velocidade", icon: "⏱️" },
+  { id: "all_modules", en: "Game Loc Master", pt: "Mestre Total", icon: "🐉" },
+];
+
+/* ═══════════════════════════════════════════════════════════
+   MINI-GAME DATA
+   ═══════════════════════════════════════════════════════════ */
+const MINIGAMES = {
+  termMatch: {
+    en: { title: "TERM MATCH", desc: "Match each term to its definition!", pairs: [
+      { term: "TM", def: "Translation Memory — database of previous translations" },
+      { term: "LQA", def: "Linguistic Quality Assurance — in-context testing" },
+      { term: "Sim-ship", def: "All languages ship simultaneously on launch day" },
+      { term: "Fuzzy match", def: "75-99% similar to an existing translation" },
+      { term: "Transcreation", def: "Creative adaptation beyond literal translation" },
+      { term: "DTP", def: "Desktop Publishing — localizing images and layouts" },
+      { term: "FIGS", def: "French, Italian, German, Spanish — common language tier" },
+      { term: "OTD", def: "On-Time Delivery rate metric" },
+    ]},
+    pt: { title: "MATCH DE TERMOS", desc: "Combine cada termo com sua definição!", pairs: [
+      { term: "TM", def: "Memória de Tradução — banco de traduções anteriores" },
+      { term: "LQA", def: "QA Linguístico — teste in-context" },
+      { term: "Sim-ship", def: "Todos os idiomas no dia do lançamento" },
+      { term: "Fuzzy match", def: "75-99% similar a uma tradução existente" },
+      { term: "Transcriação", def: "Adaptação criativa além da tradução literal" },
+      { term: "DTP", def: "Desktop Publishing — localizar imagens e layouts" },
+      { term: "FIGS", def: "Francês, Italiano, Alemão, Espanhol — tier comum" },
+      { term: "OTD", def: "Taxa de Entrega no Prazo" },
+    ]}
+  },
+  riskSpotter: {
+    en: { title: "RISK SPOTTER", desc: "Read the scenario. Spot all the red flags!", scenario: `You receive an email from a new client:
+
+"Hi! We have a mobile RPG launching in 3 weeks. We need localization into 14 languages. The game has about 200K words plus 45 minutes of voiceover. We don't have a style guide yet but can provide one next week. Budget is $15K total. We'll send the final files on Monday — can you confirm delivery by Friday? Also, the game text is in a proprietary format we built in-house. Let us know ASAP, we're talking to two other LSPs."`,
+      flags: [
+        { text: "3 weeks for 200K words + audio in 14 languages", en: "Timeline is impossibly compressed for this volume" },
+        { text: "$15K for 14 languages + audio", en: "Budget is wildly insufficient — audio alone costs more" },
+        { text: "Style guide 'next week'", en: "Reference materials delayed = quality risk from day one" },
+        { text: "Files Monday, delivery Friday", en: "5 days for 200K words is physically impossible" },
+        { text: "Proprietary format", en: "Unknown format = engineering risk, no CAT tool support" },
+        { text: "Talking to two other LSPs", en: "Pressure tactic — don't rush your quote" },
+      ]
+    },
+    pt: { title: "DETECTOR DE RISCOS", desc: "Leia o cenário. Encontre todas as red flags!", scenario: `Você recebe um email de um novo cliente:
+
+"Oi! Temos um RPG mobile lançando em 3 semanas. Precisamos de localização em 14 idiomas. O jogo tem umas 200K palavras mais 45 minutos de voiceover. Ainda não temos style guide mas podemos enviar semana que vem. Budget é $15K no total. Mandamos os arquivos finais na segunda — confirma entrega na sexta? Ah, o texto está num formato proprietário que criamos internamente. Nos diga ASAP, estamos falando com outros 2 LSPs."`,
+      flags: [
+        { text: "3 semanas para 200K + áudio em 14 idiomas", pt: "Cronograma impossível para esse volume" },
+        { text: "$15K para 14 idiomas + áudio", pt: "Budget absurdamente insuficiente" },
+        { text: "Style guide 'semana que vem'", pt: "Referências atrasadas = risco de qualidade" },
+        { text: "Arquivos segunda, entrega sexta", pt: "5 dias para 200K palavras é fisicamente impossível" },
+        { text: "Formato proprietário", pt: "Formato desconhecido = risco de engenharia" },
+        { text: "Falando com outros 2 LSPs", pt: "Tática de pressão — não apresse seu quote" },
+      ]
+    }
+  },
+  speedQuiz: {
+    en: { title: "SPEED ROUND", desc: "30 seconds. How many can you get right?", questions: [
+      { q: "CAT stands for?", o: ["Computer-Aided Translation", "Content Analysis Tool"], a: 0 },
+      { q: "German text expands by?", o: ["10-15%", "30-35%"], a: 1 },
+      { q: "LQA requires?", o: ["Implemented builds", "Only source files"], a: 0 },
+      { q: "Retainer pricing is best for?", o: ["One-time projects", "Live-service games"], a: 1 },
+      { q: "Query SLA is typically?", o: ["24-48 hours", "1 week"], a: 0 },
+      { q: "Pseudo-loc catches?", o: ["Translation errors", "UI layout issues"], a: 1 },
+      { q: "CJK stands for?", o: ["Chinese-Japanese-Korean", "Content-JSON-Key"], a: 0 },
+      { q: "Healthy LSP margin?", o: ["10-15%", "30-45%"], a: 1 },
+      { q: "MQM is a?", o: ["Quality evaluation model", "Project management tool"], a: 0 },
+      { q: "Audio loc runs behind text by?", o: ["Same day", "2-4 weeks"], a: 1 },
+    ]},
+    pt: { title: "RODADA RÁPIDA", desc: "30 segundos. Quantas você acerta?", questions: [
+      { q: "CAT significa?", o: ["Computer-Aided Translation", "Content Analysis Tool"], a: 0 },
+      { q: "Texto alemão expande?", o: ["10-15%", "30-35%"], a: 1 },
+      { q: "LQA requer?", o: ["Builds implementadas", "Só arquivos-fonte"], a: 0 },
+      { q: "Retainer é melhor para?", o: ["Projetos únicos", "Games live-service"], a: 1 },
+      { q: "SLA de query é?", o: ["24-48 horas", "1 semana"], a: 0 },
+      { q: "Pseudo-loc detecta?", o: ["Erros de tradução", "Problemas de UI"], a: 1 },
+      { q: "CJK significa?", o: ["Chinês-Japonês-Coreano", "Content-JSON-Key"], a: 0 },
+      { q: "Margem saudável de LSP?", o: ["10-15%", "30-45%"], a: 1 },
+      { q: "MQM é um?", o: ["Modelo de avaliação de qualidade", "Ferramenta de PM"], a: 0 },
+      { q: "Áudio roda atrás do texto por?", o: ["Mesmo dia", "2-4 semanas"], a: 1 },
+    ]}
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════
+   FULL 10-MODULE CONTENT (bilingual)
+   ═══════════════════════════════════════════════════════════ */
+const MODULES = [
+  // ═══ MODULE 1: ECOSYSTEM ═══
+  { icon: "🌍", color: "#39d353",
+    en: { title: "THE ECOSYSTEM", lessons: [
+      { title: "The Game Loc Universe", content: `**THE KEY PLAYERS:**\n\n► **Publishers** — Fund/distribute (Sony, EA). Decide languages, budget, timeline.\n► **Developers** — Build the game. Source content, builds, specs.\n► **LSPs** — Language Service Providers. Manage loc production.\n► **Freelance Linguists** — Translators, reviewers, LQA testers.\n► **Platform Holders** — Sony, MS, Nintendo, Steam. Cert requirements.`, tip: "You're the conductor. You don't play every instrument — you keep everyone in sync." },
+      { title: "The PM Role", content: `The PM sits at three intersections:\n\n**🔤 LINGUISTIC** — Quality, glossaries, queries, reviews.\n**⚙️ TECHNICAL** — Formats, CAT tools, char limits, encoding.\n**📋 OPERATIONAL** — Timelines, budgets, vendors, risk.\n\n**You MUST:**\n► Understand the full workflow\n► Anticipate problems\n► Communicate in all directions\n► Protect your team from chaos\n\n**You DON'T need to:**\n► Be a master translator\n► Fix code\n► Make creative decisions`, tip: "Best PMs translate context, not language." },
+      { title: "Service Models", content: `**MODEL 1: FULL OUTSOURCE** — Client → LSP → Delivery. PM owns pipeline.\n\n**MODEL 2: HYBRID** — Client has internal team + outsources some. PM aligns to their process.\n\n**MODEL 3: IN-HOUSE** — PM inside studio. Fewer languages, closer to game.\n\n**MODEL 4: COMMUNITY** — Fan/crowdsource. PM as curator. QC is hard.`, tip: "You'll work across all models. Each teaches different skills." },
+      { title: "Content Types", content: `**📝 UI/UX** — Short strings with CHAR LIMITS. Context challenge.\n**📖 NARRATIVE** — Dialogue, lore. 500K+ words. Consistency challenge.\n**🎙️ AUDIO** — Casting, directing, lip-sync. Expensive, slow.\n**🎬 CINEMATICS** — Timing-critical subtitles.\n**📣 MARKETING** — Transcreation > translation.\n**⚖️ LEGAL** — EULA, ToS. Legally accurate per region.`, tip: "Always ask: 'What content types are in scope?' Prevents 80% of scope creep." },
+      { title: "Game Dev Lifecycle", content: `**🟡 PRE-PROD** — Push for early loc planning.\n**🟠 ALPHA** — Source unstable. Initial translation. Audio casting.\n**🔴 BETA** — Heavy production. LQA on builds. Your busiest phase.\n**🟣 GOLD** — Everything final. Zero tolerance.\n**🔵 LIVE OPS** — Continuous loc. Shorter cycles.\n\n**SIM-SHIP** = all languages day one (harder)\n**POST-LAUNCH** = staggered (easier)`, tip: "Ask early: 'Is this sim-ship?' Changes everything." }
+    ], quiz: [
+      { q: "Who decides which languages?", o: ["LSP", "Publisher", "Translator", "Platform"], a: 1 },
+      { q: "Sim-ship means?", o: ["Ship by sea", "All languages day one", "Simulation game", "Single language"], a: 1 },
+      { q: "Transcreation is for?", o: ["Legal", "UI", "Marketing", "System messages"], a: 2 },
+    ], deliverable: "Create an Ecosystem Map: Publisher → Dev → LSP → Linguists → Platform." },
+    pt: { title: "O ECOSSISTEMA", lessons: [
+      { title: "O Universo da Loc", content: `**OS PLAYERS:**\n\n► **Publishers** — Financiam/distribuem (Sony, EA). Decidem idiomas, budget, prazo.\n► **Desenvolvedores** — Criam o jogo. Conteúdo-fonte, builds, specs.\n► **LSPs** — Gerenciam produção de loc.\n► **Linguistas Freelance** — Tradutores, revisores, LQA.\n► **Plataformas** — Sony, MS, Nintendo, Steam. Requisitos de cert.`, tip: "Você é o maestro. Garante que todos toquem em sincronia." },
+      { title: "O Papel do PM", content: `O PM na interseção de três mundos:\n\n**🔤 LINGUÍSTICO** — Qualidade, glossários, queries, revisão.\n**⚙️ TÉCNICO** — Formatos, CAT, limites, encoding.\n**📋 OPERACIONAL** — Prazos, budgets, vendors, risco.\n\n**Você DEVE:**\n► Entender o workflow todo\n► Antecipar problemas\n► Comunicar em todas as direções\n► Proteger o time\n\n**Você NÃO precisa:**\n► Ser tradutor master\n► Corrigir bugs\n► Decidir design do jogo`, tip: "Melhores PMs traduzem contexto, não idioma." },
+      { title: "Modelos de Serviço", content: `**MODELO 1: OUTSOURCE** — Cliente → LSP → Entrega. PM dono do pipeline.\n\n**MODELO 2: HÍBRIDO** — Time interno + terceirização parcial.\n\n**MODELO 3: IN-HOUSE** — PM no estúdio. Menos idiomas.\n\n**MODELO 4: COMUNIDADE** — Traduções de fãs. PM curador.`, tip: "Cada modelo ensina habilidades diferentes." },
+      { title: "Tipos de Conteúdo", content: `**📝 UI/UX** — Strings curtas com LIMITES. Desafio: contexto.\n**📖 NARRATIVA** — Diálogos, lore. 500K+. Desafio: consistência.\n**🎙️ ÁUDIO** — Casting, direção, lip-sync. Caro, lento.\n**🎬 CINEMÁTICAS** — Legendas com timing.\n**📣 MARKETING** — Transcriação > tradução.\n**⚖️ LEGAL** — EULA, ToS. Precisão jurídica.`, tip: "Pergunte: 'Quais conteúdos no escopo?' Previne 80% do scope creep." },
+      { title: "Ciclo do Jogo", content: `**🟡 PRÉ-PROD** — Planeje loc cedo.\n**🟠 ALPHA** — Fonte instável. Tradução inicial. Casting.\n**🔴 BETA** — Produção pesada. LQA. Fase mais intensa.\n**🟣 GOLD** — Tudo final. Tolerância zero.\n**🔵 LIVE OPS** — Loc contínua. Ciclos curtos.\n\n**SIM-SHIP** = todos dia 1 (mais difícil)\n**PÓS-LANÇAMENTO** = escalonado (mais fácil)`, tip: "Pergunte cedo: 'É sim-ship?'" }
+    ], quiz: [
+      { q: "Quem decide os idiomas?", o: ["LSP", "Publisher", "Tradutor", "Plataforma"], a: 1 },
+      { q: "Sim-ship significa?", o: ["Envio naval", "Todos os idiomas dia 1", "Simulação", "Idioma único"], a: 1 },
+      { q: "Transcriação é para?", o: ["Legal", "UI", "Marketing", "Sistema"], a: 2 },
+    ], deliverable: "Crie Mapa do Ecossistema: Publisher → Dev → LSP → Linguistas → Plataforma." }
+  },
+  // ═══ MODULE 2: PROJECT ANATOMY ═══
+  { icon: "🔬", color: "#f0883e",
+    en: { title: "PROJECT ANATOMY", lessons: [
+      { title: "5 Core Components", content: `**1. SCOPE** — Word count, file types, what's IN/OUT.\n**2. LANGUAGES** — Tiers: FIGS vs CJK vs long tail.\n**3. ASSETS** — Text, audio scripts, images, videos.\n**4. TIMELINE** — Milestones, dependencies, deadlines.\n**5. BUDGET** — Rate × volume × languages + overhead + 10-15% buffer.`, tip: "Before 'yes': What, How Many, Which Languages, When, How Much." },
+      { title: "Indie vs AAA", content: `**INDIE (5-50K)** → 1-5 langs, 2-6 weeks, Crowdin/Sheets.\n**MID (50-200K)** → 5-12 langs, 2-4 months, memoQ/Jira.\n**AAA (200K-1M+)** → 12-30+ langs, 6-18 months, enterprise tools, NDAs.\n\nThe jump isn't volume — it's complexity, stakeholders, rigor.`, tip: "Don't apply AAA to indie (overkill) or indie to AAA (disaster)." },
+      { title: "Parallel Workflows", content: `**TEXT** — Source → Translate → Review → Deliver\n**AUDIO** — Script → Cast → Record → Edit → Implement (2-4 weeks behind text)\n**LQA** — Build → Test → Bug report → Fix (needs builds)\n**DTP** — Find images → Extract → Translate → Recreate\n**ENGINEERING** — Parse → Protect vars → Integrate (the invisible stream)\n\nYou track ALL simultaneously with dependencies.`, tip: "Use a GANTT from day one." },
+      { title: "Sim-Ship Planning", content: `Content arrives in waves. You localize IN PARALLEL with dev.\n\n► **Tier 1:** UI, critical gameplay (first)\n► **Tier 2:** Narrative, dialogue (bulk)\n► **Tier 3:** Marketing (can slip)\n► **Delta mgmt** — Track changes per batch\n► **Retranslation buffer** — 10-20%`, tip: "Sim-ship lives and dies by batch strategy." },
+      { title: "Live-Service Loc", content: `Content ships every 1-4 weeks. Speed > perfection.\n\n► Standing team on retainer\n► Always-on TM shared across drops\n► 1-pass QA, template workflows\n\n**Metrics:** Turnaround time, OTD, quality score, vendor availability.`, tip: "Your most important asset: a reliable standing team." }
+    ], quiz: [
+      { q: "Five core components?", o: ["Scope/Languages/Assets/Timeline/Budget", "Text/Audio/LQA/DTP/Engineering", "Publisher/Dev/LSP/Vendor/PM"], a: 0 },
+      { q: "Indie vs AAA difference?", o: ["Word count only", "Complexity and rigor", "CAT tool used"], a: 1 },
+      { q: "Live-service priority?", o: ["Perfect quality", "Turnaround speed", "Lowest cost"], a: 1 },
+    ], deliverable: "Project Breakdown for 300K-word RPG in 10 languages." },
+    pt: { title: "ANATOMIA DO PROJETO", lessons: [
+      { title: "5 Componentes", content: `**1. ESCOPO** — Palavras, tipos, o que está IN/OUT.\n**2. IDIOMAS** — Tiers: FIGS vs CJK vs long tail.\n**3. ASSETS** — Texto, scripts de áudio, imagens, vídeos.\n**4. CRONOGRAMA** — Milestones, dependências, deadlines.\n**5. ORÇAMENTO** — Tarifa × volume × idiomas + overhead + 10-15%.`, tip: "Antes de 'sim': O Quê, Quanto, Quais, Quando, Por Quanto." },
+      { title: "Indie vs AAA", content: `**INDIE (5-50K)** → 1-5 idiomas, 2-6 sem, Crowdin/Sheets.\n**MID (50-200K)** → 5-12 idiomas, 2-4 meses, memoQ/Jira.\n**AAA (200K-1M+)** → 12-30+, 6-18 meses, tools enterprise, NDAs.\n\nO salto não é volume — é complexidade e rigor.`, tip: "Não use processo AAA em indie nem indie em AAA." },
+      { title: "Workflows Paralelos", content: `**TEXTO** — Fonte → Traduz → Revisa → Entrega\n**ÁUDIO** — Script → Cast → Grava → Edita → Implementa (2-4 sem atrás)\n**LQA** — Build → Testa → Bug report → Corrige\n**DTP** — Imagens → Extrai → Traduz → Recria\n**ENGENHARIA** — Parse → Protege vars → Integra\n\nVocê monitora TODAS com dependências.`, tip: "Use GANTT desde o dia 1." },
+      { title: "Sim-Ship", content: `Conteúdo chega em ondas. Localize EM PARALELO.\n\n► **Tier 1:** UI, gameplay crítico\n► **Tier 2:** Narrativa (grosso)\n► **Tier 3:** Marketing (pode atrasar)\n► **Delta** — Rastreie mudanças por batch\n► **Buffer retradução** — 10-20%`, tip: "Sim-ship vive e morre pela estratégia de batch." },
+      { title: "Loc Contínua", content: `Conteúdo shipa a cada 1-4 semanas. Velocidade > perfeição.\n\n► Time fixo em retainer\n► TM always-on compartilhada\n► QA 1 passada, workflows template\n\n**Métricas:** Tempo de retorno, OTD, qualidade, disponibilidade.`, tip: "Ativo mais importante: time fixo confiável." }
+    ], quiz: [
+      { q: "5 componentes?", o: ["Escopo/Idiomas/Assets/Cronograma/Orçamento", "Texto/Áudio/LQA/DTP/Engenharia", "Publisher/Dev/LSP/Vendor/PM"], a: 0 },
+      { q: "Diferença indie vs AAA?", o: ["Só volume", "Complexidade e rigor", "CAT tool"], a: 1 },
+      { q: "Prioridade live-service?", o: ["Qualidade perfeita", "Velocidade", "Menor custo"], a: 1 },
+    ], deliverable: "Breakdown de RPG 300K palavras em 10 idiomas." }
+  },
+  // ═══ MODULE 3: TOOLBOX ═══
+  { icon: "🛠️", color: "#58a6ff",
+    en: { title: "PM TOOLBOX", lessons: [
+      { title: "CAT Tools", content: `**memoQ** — Industry standard for games. Server for teams. Strong TM/TB.\n**SDL Trados** — Veteran. GroupShare. Big plugin ecosystem.\n**Crowdin/Lokalise** — Cloud-native. Git integration. Great for indie/continuous.\n\n**PM needs:** Create projects, assign tasks, run analyses, manage TMs. Understand match rates — they drive your quotes.`, tip: "Best CAT tool = the one your team knows." },
+      { title: "BMS Systems", content: `**TerraSoft** — LSP-specialized. Projects, vendors, invoicing, API.\n**XTRF** — Enterprise. Full automation, portals, analytics.\n**Plunet** — German engineering. Financial tracking, multi-tier.\n\n**CAT** = where translation happens\n**BMS** = where business happens\nGood PMs live in both.`, tip: "Automate everything in the BMS. Admin time saved = quality time gained." },
+      { title: "Communication", content: `**Slack/Teams** — Channels per project. Threads. Pin key info.\n**Email** — Formal, client-facing, audit trail.\n**Jira/Asana** — Task tracking, LQA bugs.\n**Confluence/Notion** — Docs, wikis, single source of truth.\n\n**Queries:** Shared sheet. ID/Source/Language/Query/Context/Answer/Status.\nSLA: 24-48h standard, 4h blockers.`, tip: "Never answer a query you're unsure about. Escalate." },
+      { title: "Trackers", content: `**Master Tracker** — Task/Language/Assignee/Status/Due. Update DAILY.\n**Delivery Log** — Every file: date, version, language, recipient.\n**Vendor Tracker** — Rates, availability, quality scores, backups.\n**Quality Dashboard** — Errors per 1K words, by vendor, trends.\n**Client Report** — 1 page max. RAG status.`, tip: "A tracker you don't update is worse than none." },
+      { title: "Automation", content: `**LV1: Formulas** — VLOOKUP, conditional formatting, pivots. 1h invest, daily payoff.\n**LV2: Power Automate** — Email→Teams, auto-tasks. 2-4h, weekly payoff.\n**LV3: APIs** — BMS→CAT, email parsing. 1-2 days, per-project payoff.\n**LV4: AI** — Claude API for query triage, risk detection. 1 week, transformative.\n\n**Rule:** Automate repetitive, not relational.`, tip: "Start with Level 1. Simplest automation = most impactful." }
+    ], quiz: [
+      { q: "CAT vs BMS?", o: ["Same", "CAT=translation, BMS=business", "CAT for PMs"], a: 1 },
+      { q: "Query SLA?", o: ["1 hour", "24-48 hours", "1 week"], a: 1 },
+      { q: "Automate first?", o: ["Client comms", "Spreadsheet formulas", "Vendor negotiations"], a: 1 },
+    ], deliverable: "Build Master Tracker + Delivery Log + Vendor Tracker + Weekly Report templates." },
+    pt: { title: "CAIXA DE FERRAMENTAS", lessons: [
+      { title: "CAT Tools", content: `**memoQ** — Padrão para games. Server. TM/TB forte.\n**SDL Trados** — Veterano. GroupShare. Plugins.\n**Crowdin/Lokalise** — Cloud. Git. Ótimo para indie/contínua.\n\n**PM precisa:** Criar projetos, atribuir tarefas, rodar análises, gerenciar TMs. Match rates dirigem seus quotes.`, tip: "Melhor CAT = a que seu time conhece." },
+      { title: "Sistemas BMS", content: `**TerraSoft** — Para LSPs. Projetos, vendors, faturamento, API.\n**XTRF** — Enterprise. Automação, portais, analytics.\n**Plunet** — Financeiro, multi-tier.\n\n**CAT** = onde tradução acontece\n**BMS** = onde negócio acontece`, tip: "Automatize tudo no BMS." },
+      { title: "Comunicação", content: `**Slack/Teams** — Canais por projeto. Threads. Fixe infos.\n**Email** — Formal, client-facing, registro.\n**Jira/Asana** — Tasks, bugs de LQA.\n**Confluence/Notion** — Docs, wikis.\n\n**Queries:** Planilha compartilhada. ID/Fonte/Idioma/Query/Contexto/Resposta/Status.\nSLA: 24-48h padrão, 4h blockers.`, tip: "Nunca responda query sem certeza. Escale." },
+      { title: "Trackers", content: `**Master** — Tarefa/Idioma/Responsável/Status/Prazo. Atualize DIARIAMENTE.\n**Log de Entregas** — Cada arquivo: data, versão, idioma.\n**Vendors** — Tarifas, disponibilidade, scores, backups.\n**Qualidade** — Erros por 1K, por vendor, tendência.\n**Relatório** — 1 página. RAG.`, tip: "Tracker sem atualizar é pior que nenhum." },
+      { title: "Automação", content: `**NV1: Fórmulas** — VLOOKUP, formatação, dinâmicas. 1h, retorno diário.\n**NV2: Power Automate** — Email→Teams, tarefas auto. 2-4h, semanal.\n**NV3: APIs** — BMS→CAT, parsing. 1-2 dias, por projeto.\n**NV4: IA** — Claude API, triagem, riscos. 1 sem, transformativo.\n\n**Regra:** Automatize repetitivo, não relacional.`, tip: "Comece pelo Nível 1. O mais simples é o mais impactante." }
+    ], quiz: [
+      { q: "CAT vs BMS?", o: ["Mesma coisa", "CAT=tradução, BMS=negócio", "CAT pra PMs"], a: 1 },
+      { q: "SLA de query?", o: ["1 hora", "24-48 horas", "1 semana"], a: 1 },
+      { q: "Automatizar primeiro?", o: ["Comms cliente", "Fórmulas", "Negociação vendor"], a: 1 },
+    ], deliverable: "Monte Master Tracker + Log + Vendor Tracker + Relatório Semanal." }
+  },
+  // ═══ MODULE 4: QUOTING ═══
+  { icon: "💰", color: "#d2a8ff",
+    en: { title: "QUOTING", lessons: [
+      { title: "Units", content: `**WORDS** — Universal. Source count = quote basis.\n**CHARACTERS** — CJK languages.\n**MINUTES** — Audio. 1 min ≈ 150-170 words.\n**HOURS/SCREENS** — LQA.\n**IMAGES** — DTP.\n\nQuote in the unit the CLIENT expects.`, tip: "Ask how they've been quoted before." },
+      { title: "File Analysis", content: `**CAT analysis shows:** Total words, repetitions, 100% matches, fuzzy (75-99%), no match.\n\n→ 100% ≠ free (20-30% rate for review)\n→ Fuzzy: 70-85% rate\n→ WEIGHTED count = real volume\n\n**Complexity:** Technical=slower, creative=premium, no context=risk buffer.\n\n🚩 No files for analysis = quoting blind.`, tip: "Never quote without your own analysis." },
+      { title: "Timeline Math", content: `**Words ÷ capacity = days + review (50-70%) + engineering + 10-20% buffer**\n\n→ Standard: 2,000-2,500/day\n→ Fast: 3,000-4,000\n→ Complex: 1,500-2,000\n→ Review: 4,000-6,000\n\n2 translators ≠ half time (coordination overhead). Rush: +25-50%.`, tip: "Negotiate timeline BEFORE accepting." },
+      { title: "Pricing Models", content: `**Per-word** — Rate × weighted × langs. $0.05-0.20 range.\n**Hourly** — LQA, DTP. $25-80.\n**Flat fee** — Fixed scope/price. You absorb scope creep.\n**Retainer** — Monthly for live-service. Overages billed.\n\n**Tiers:** FIGS/PTBR (lower) → CJK/Arabic (higher) → Exotic (highest).`, tip: "Compete on reliability, not price." },
+      { title: "Quote Defense", content: `**🚩 Red flags:** Quote by EOD, no files, same rate all langs, refs later, match competitor.\n\n**Defense:**\n► List assumptions and IN/OUT scope\n► "Based on files from [date]"\n► Change order clause\n► 30-day validity\n\n**Margin:** Vendor + PM (10-15%) + Tech (5-10%) + Contingency (5-10%) = 30-45% target.`, tip: "A good quote tells a story." }
+    ], quiz: [
+      { q: "CJK pricing unit?", o: ["Words", "Characters", "Pages"], a: 1 },
+      { q: "Weighted count includes?", o: ["Only new", "TM at discount + new", "Total unadjusted"], a: 1 },
+      { q: "Healthy margin?", o: ["10-15%", "30-45%", "50-60%"], a: 1 },
+    ], deliverable: "Build Quote Calculator spreadsheet." },
+    pt: { title: "ORÇAMENTO", lessons: [
+      { title: "Unidades", content: `**PALAVRAS** — Universal. Contagem-fonte = base.\n**CARACTERES** — CJK.\n**MINUTOS** — Áudio. 1 min ≈ 150-170 palavras.\n**HORAS/TELAS** — LQA.\n**IMAGENS** — DTP.\n\nOrce na unidade que o CLIENTE espera.`, tip: "Pergunte como foram orçados antes." },
+      { title: "Análise de Arquivos", content: `**Análise CAT:** Total, repetições, 100%, fuzzy (75-99%), no match.\n\n→ 100% ≠ grátis (20-30% tarifa)\n→ Fuzzy: 70-85%\n→ Contagem PONDERADA = volume real\n\n**Complexidade:** Técnico=lento, criativo=premium, sem contexto=buffer.\n\n🚩 Sem arquivos = orçando no escuro.`, tip: "Nunca orce sem sua análise." },
+      { title: "Cálculo de Prazo", content: `**Palavras ÷ capacidade = dias + revisão (50-70%) + eng + 10-20% buffer**\n\n→ Padrão: 2.000-2.500/dia\n→ Rápido: 3.000-4.000\n→ Complexo: 1.500-2.000\n→ Revisão: 4.000-6.000\n\n2 tradutores ≠ metade do tempo. Rush: +25-50%.`, tip: "Negocie prazo ANTES de aceitar." },
+      { title: "Modelos de Preço", content: `**Por palavra** — Tarifa × ponderada × idiomas. $0.05-0.20.\n**Por hora** — LQA, DTP. $25-80.\n**Fee fixo** — Escopo fechado. Você absorve scope creep.\n**Retainer** — Mensal para live-service.\n\n**Tiers:** FIGS/PTBR (menor) → CJK/Árabe (maior) → Exóticos (maior).`, tip: "Compita por confiabilidade, não preço." },
+      { title: "Defesa do Quote", content: `**🚩 Red flags:** Quote pra hoje, sem arquivos, mesma tarifa, refs depois, cobrir concorrente.\n\n**Defesa:**\n► Liste premissas e IN/OUT\n► "Baseado em arquivos de [data]"\n► Cláusula de change order\n► Validade 30 dias\n\n**Margem:** Vendor + PM (10-15%) + Tech (5-10%) + Contingência (5-10%) = meta 30-45%.`, tip: "Bom quote conta uma história." }
+    ], quiz: [
+      { q: "Unidade CJK?", o: ["Palavras", "Caracteres", "Páginas"], a: 1 },
+      { q: "Contagem ponderada?", o: ["Só novas", "TM com desconto + novas", "Total sem ajuste"], a: 1 },
+      { q: "Margem saudável?", o: ["10-15%", "30-45%", "50-60%"], a: 1 },
+    ], deliverable: "Monte Calculadora de Quote." }
+  },
+  // ═══ MODULE 5: KICKOFF ═══
+  { icon: "🚀", color: "#f778ba",
+    en: { title: "KICKOFF", lessons: [
+      { title: "Kickoff Meeting", content: `**Who:** Client loc mgr + producer. LSP PM + AM. Max 8.\n\n**Agenda:** Project overview → Scope → Timeline → Tools → References → Comms plan → Risks\n\n**After:** Notes within 24h. List all decisions. Written confirmation. This email = your shield.`, tip: "Your ONE chance to ask all the questions." },
+      { title: "Reference Kit", content: `**Style Guide** — Tone, formality, per-language. No guide? Create basics.\n**Glossary** — Key terms, characters, locations. Build from day 1.\n**TM** — Previous translations. Dirty TM = propagated errors.\n**Build** — Playable version. #1 quality differentiator.\n**Art Bible** — Visual identity, world-building.`, tip: "No references from client? YOUR cue to create them." },
+      { title: "Query Management", content: `Linguist logs → PM reviews → Escalates to client → Distributes answer to ALL.\n\n**Sheet:** ID/Source/Language/Query/Context/Suggestion/Answer/Status\n\n► Batch 10-20, don't trickle\n► Include context (screenshots!)\n► Suggest an answer\n► SLA: 24-48h, 4h blockers`, tip: "Well-managed queries = #1 quality predictor." },
+      { title: "Vendor Briefing", content: `**Include:** Game overview, character guide, context access, style summary, glossary, tech constraints, query process, deadlines.\n\n**Selection:** Gaming experience, availability, quality record, tool proficiency.\n\n**Onboarding:** Small test (500-1K) → Review → Feedback → Full volume.`, tip: "30 min of briefing saves 30 hours of fixes." },
+      { title: "Engineering Alignment", content: `**Formats:** XLIFF/JSON/XML/CSV — verify UTF-8.\n**Char limits:** DE +30-35%, CJK -30-50%, AR/HE = RTL.\n**Align:** Delivery method, build schedule, variable protection, placeholder behavior, font support, overflow.\n\n**Pseudo-loc:** Accented chars + 30% padding. Catches UI issues early.`, tip: "Meet engineering ONCE. Put it in writing." }
+    ], quiz: [
+      { q: "Send within 24h?", o: ["First batch", "Meeting notes + actions", "Final quote"], a: 1 },
+      { q: "Pseudo-loc catches?", o: ["Translation errors", "UI layout issues", "Audio sync"], a: 1 },
+      { q: "Query batching?", o: ["One at a time", "10-20 together", "End of project"], a: 1 },
+    ], deliverable: "Create Kickoff Checklist + Vendor Briefing Template." },
+    pt: { title: "KICKOFF", lessons: [
+      { title: "Reunião de Kickoff", content: `**Quem:** Loc mgr + produtor do cliente. PM + AM do LSP. Máx 8.\n\n**Agenda:** Visão → Escopo → Cronograma → Ferramentas → Referências → Comunicação → Riscos\n\n**Depois:** Ata em 24h. Liste decisões. Confirmação escrita = seu escudo.`, tip: "Sua ÚNICA chance de perguntar tudo." },
+      { title: "Kit de Referência", content: `**Style Guide** — Tom, formalidade, por idioma. Sem guia? Crie.\n**Glossário** — Termos-chave, personagens, locais. Construa desde dia 1.\n**TM** — Traduções anteriores. TM suja = erros propagados.\n**Build** — Versão jogável. Diferenciador #1.\n**Art Bible** — Identidade visual, worldbuilding.`, tip: "Sem referências? Seu sinal pra criar." },
+      { title: "Gestão de Queries", content: `Linguista registra → PM revisa → Escala → Distribui a TODOS.\n\n**Planilha:** ID/Fonte/Idioma/Query/Contexto/Sugestão/Resposta/Status\n\n► Agrupe 10-20\n► Inclua contexto (screenshots!)\n► Sugira resposta\n► SLA: 24-48h, 4h blockers`, tip: "Queries bem geridas = maior preditor de qualidade." },
+      { title: "Briefing de Vendors", content: `**Inclua:** Visão do jogo, personagens, contexto, style guide, glossário, restrições técnicas, queries, prazos.\n\n**Seleção:** Experiência games, disponibilidade, qualidade, ferramentas.\n\n**Onboarding:** Teste pequeno → Revise → Feedback → Volume.`, tip: "30 min de briefing = 30h de correção economizadas." },
+      { title: "Engenharia", content: `**Formatos:** XLIFF/JSON/XML/CSV — verifique UTF-8.\n**Limites:** DE +30-35%, CJK -30-50%, AR/HE = RTL.\n**Alinhe:** Entrega, builds, variáveis, placeholders, fontes, overflow.\n\n**Pseudo-loc:** Acentos + 30% padding. Detecta problemas de UI.`, tip: "Reúna com eng UMA VEZ. Coloque por escrito." }
+    ], quiz: [
+      { q: "Enviar em 24h?", o: ["Primeiro batch", "Ata + actions", "Quote final"], a: 1 },
+      { q: "Pseudo-loc detecta?", o: ["Erros de tradução", "Problemas de UI", "Sync de áudio"], a: 1 },
+      { q: "Queries?", o: ["Uma por vez", "10-20 agrupadas", "Fim do projeto"], a: 1 },
+    ], deliverable: "Crie Checklist de Kickoff + Template de Briefing." }
+  },
+  // ═══ MODULE 6: PRODUCTION ═══
+  { icon: "⚡", color: "#39d353",
+    en: { title: "PRODUCTION MGMT", lessons: [
+      { title: "The Standard Workflow", content: `**Every batch follows this pipeline:**\n\n► **Handoff** — Receive files, verify format, run analysis\n► **Prep** — Create CAT project, assign TM/TB, set up filters\n► **Translation** — Vendor works. You monitor progress daily.\n► **Review** — Second linguist checks. Bilingual or monolingual.\n► **QA checks** — Automated: tags, numbers, consistency, length\n► **Delivery** — Package files, verify format, send + log\n\n**CYCLE TIME:** Track how long each step takes. This is your forecasting data.`, tip: "The boring, repeatable process is what makes great loc. Respect the pipeline." },
+      { title: "Vendor Management", content: `**ALLOCATION:**\n→ Match vendor strengths to content type\n→ Narrative specialists ≠ UI specialists\n→ Always have a backup per language\n\n**CAPACITY PLANNING:**\n→ Check availability BEFORE committing to client\n→ Standard: 2,000-2,500 words/day per translator\n→ Don't overload — quality drops above 3,000/day\n\n**PERFORMANCE:**\n→ Track: OTD, error rate, responsiveness, availability\n→ Quarterly reviews: share data, set goals\n→ Reward top performers with priority assignments\n→ Address underperformance early — don't wait`, tip: "Your vendors are your product. Invest in the relationship." },
+      { title: "Daily Operations", content: `**MORNING ROUTINE:**\n→ Check overnight deliveries and queries\n→ Update tracker status\n→ Flag blockers, escalate if needed\n→ Send daily update to team/client if in crunch\n\n**BATCH MANAGEMENT:**\n→ Number batches sequentially (B001, B002...)\n→ Track: received date, assigned, due, delivered\n→ Never mix batches — version chaos\n→ Delta batches: clearly mark what changed\n\n**MEETINGS:**\n→ Internal: 15-min daily standup during crunch\n→ Client: weekly status call\n→ Keep both SHORT. Agenda + action items.`, tip: "15 minutes of structured morning ops prevents 2 hours of afternoon firefighting." },
+      { title: "Change Management", content: `**SCOPE CHANGES WILL HAPPEN.** Plan for them.\n\n**WHEN SOURCE CHANGES:**\n→ Run delta analysis (new vs. previous version)\n→ Identify affected segments\n→ Update TM with superseded translations\n→ Communicate impact to all affected linguists\n\n**CHANGE ORDER PROCESS:**\n→ Client requests change → PM assesses impact\n→ Impact report: time, cost, risk\n→ Client approves IN WRITING\n→ Update tracker, timeline, budget\n→ Never absorb scope creep silently — it kills margins\n\n**VERSIONING:**\n→ Filename convention: [Project]_[Lang]_[Date]_v[N]\n→ Never overwrite — always increment\n→ Archive previous versions`, tip: "Every undocumented change is a future dispute. Paper trail everything." },
+      { title: "Delivery & Handback", content: `**PRE-DELIVERY CHECKLIST:**\n□ All files present per language\n□ File format matches spec\n□ Automated QA passed (tags, numbers)\n□ Naming convention correct\n□ No tracked changes or comments left\n□ Character limits verified\n□ Delivery log updated\n\n**DELIVERY METHOD:** Per client — FTP, Git, email, portal.\n\n**AFTER DELIVERY:**\n→ Log in delivery tracker with timestamp\n→ Send confirmation email\n→ Archive project files\n→ Update TM with delivered translations\n→ Note any open items or known issues`, tip: "A clean delivery is your calling card. Sloppy handbacks erode trust fast." }
+    ], quiz: [
+      { q: "What comes after translation in the pipeline?", o: ["Delivery", "Review by second linguist", "File prep"], a: 1 },
+      { q: "Max sustainable translator output?", o: ["1,000/day", "3,000/day", "5,000/day"], a: 1 },
+      { q: "Scope change requires?", o: ["Silent absorption", "Written client approval", "PM decision alone"], a: 1 },
+    ], deliverable: "Create a Batch Management Template and a Pre-Delivery Checklist." },
+    pt: { title: "GESTÃO DE PRODUÇÃO", lessons: [
+      { title: "Workflow Padrão", content: `**Todo batch segue este pipeline:**\n\n► **Handoff** — Receba arquivos, verifique formato, rode análise\n► **Prep** — Crie projeto na CAT, atribua TM/TB, configure filtros\n► **Tradução** — Vendor trabalha. Monitore diariamente.\n► **Revisão** — Segundo linguista checa. Bilíngue ou monolíngue.\n► **QA automático** — Tags, números, consistência, comprimento\n► **Entrega** — Empacote, verifique formato, envie + registre\n\n**CYCLE TIME:** Rastreie quanto cada etapa leva. São seus dados de previsão.`, tip: "O processo repetitivo e chato é o que faz boa loc. Respeite o pipeline." },
+      { title: "Gestão de Vendors", content: `**ALOCAÇÃO:**\n→ Combine força do vendor com tipo de conteúdo\n→ Especialista narrativo ≠ especialista UI\n→ Sempre tenha backup por idioma\n\n**CAPACIDADE:**\n→ Cheque disponibilidade ANTES de se comprometer\n→ Padrão: 2.000-2.500/dia por tradutor\n→ Não sobrecarregue — qualidade cai acima de 3.000\n\n**PERFORMANCE:**\n→ Rastreie: OTD, taxa de erro, responsividade\n→ Reviews trimestrais: dados, metas\n→ Premie top performers com prioridade`, tip: "Seus vendors são seu produto. Invista na relação." },
+      { title: "Operação Diária", content: `**ROTINA MATINAL:**\n→ Cheque entregas e queries da noite\n→ Atualize tracker\n→ Sinalize blockers, escale se necessário\n→ Update diário em crunch\n\n**GESTÃO DE BATCH:**\n→ Numere sequencialmente (B001, B002...)\n→ Rastreie: recebido, atribuído, prazo, entregue\n→ Nunca misture batches\n→ Delta: marque claramente o que mudou\n\n**REUNIÕES:**\n→ Interna: standup 15 min em crunch\n→ Cliente: status semanal\n→ Mantenha CURTAS.`, tip: "15 min de ops matinal previnem 2h de incêndio à tarde." },
+      { title: "Gestão de Mudanças", content: `**MUDANÇAS VÃO ACONTECER.** Planeje.\n\n**QUANDO FONTE MUDA:**\n→ Rode análise delta\n→ Identifique segmentos afetados\n→ Atualize TM\n→ Comunique a todos linguistas\n\n**PROCESSO:**\n→ Cliente pede → PM avalia impacto\n→ Relatório: tempo, custo, risco\n→ Cliente aprova POR ESCRITO\n→ Atualize tracker, prazo, budget\n→ Nunca absorva scope creep silenciosamente\n\n**VERSIONAMENTO:**\n→ [Projeto]_[Idioma]_[Data]_v[N]\n→ Nunca sobrescreva — incremente\n→ Arquive versões anteriores`, tip: "Mudança sem documentar = disputa futura." },
+      { title: "Entrega", content: `**CHECKLIST PRÉ-ENTREGA:**\n□ Todos arquivos presentes por idioma\n□ Formato conforme spec\n□ QA automático ok (tags, números)\n□ Nomenclatura correta\n□ Sem tracked changes\n□ Limites verificados\n□ Log atualizado\n\n**MÉTODO:** FTP, Git, email, portal — conforme cliente.\n\n**APÓS ENTREGA:**\n→ Registre com timestamp\n→ Email de confirmação\n→ Arquive projeto\n→ Atualize TM\n→ Note itens abertos`, tip: "Entrega limpa é seu cartão de visita." }
+    ], quiz: [
+      { q: "Após tradução vem?", o: ["Entrega", "Revisão por segundo linguista", "Prep de arquivo"], a: 1 },
+      { q: "Capacidade sustentável?", o: ["1.000/dia", "3.000/dia", "5.000/dia"], a: 1 },
+      { q: "Mudança de escopo requer?", o: ["Absorver calado", "Aprovação escrita", "Decisão só do PM"], a: 1 },
+    ], deliverable: "Crie Template de Batch + Checklist Pré-Entrega." }
+  },
+  // ═══ MODULE 7: LQA ═══
+  { icon: "🛡️", color: "#f0883e",
+    en: { title: "QUALITY (LQA)", lessons: [
+      { title: "LQA vs Software QA", content: `**LQA is NOT software testing.** Don't confuse them.\n\n**LQA checks:** Linguistic accuracy, fluency, terminology, style, context fit, cultural appropriateness, character limits, text truncation.\n\n**Software QA checks:** Crashes, performance, functionality.\n\n**LQA testers need:** Native fluency + gaming experience + testing methodology.\n\nLQA happens IN-CONTEXT — in the actual game build. Out-of-context review catches maybe 70%. In-context catches 95%.`, tip: "Push for in-context LQA. It's the single biggest quality investment." },
+      { title: "Error Models", content: `**MQM (Multidimensional Quality Metrics):**\n→ Industry standard framework\n→ Categories: Accuracy, Fluency, Terminology, Style, Locale, Design\n→ Severity: Critical, Major, Minor\n→ Weighted scoring system\n\n**ERROR TYPES (game-specific):**\n→ Mistranslation, omission, addition\n→ Grammar, spelling, punctuation\n→ Wrong terminology (glossary violation)\n→ Style mismatch (tone, formality)\n→ Truncation / overflow\n→ Untranslated text\n→ Variable/tag corruption\n→ Cultural inappropriateness\n\n**PASS/FAIL:** Define threshold before testing starts. Example: <2 critical, <5 major per 1K words.`, tip: "Define your error model and pass/fail criteria at kickoff. Not during LQA." },
+      { title: "LQA Process", content: `**SETUP:**\n→ Define scope: which builds, which languages, which areas\n→ Assign testers (1 per language minimum)\n→ Provide: translated build, glossary, style guide, test plan\n→ Bug tracker access (Jira, Mantis, spreadsheet)\n\n**EXECUTION:**\n→ Tester plays through game in target language\n→ Logs bugs: location, screenshot, error type, severity, suggestion\n→ PM triages: valid? duplicate? won't fix?\n→ Dev implements fixes → Verify in next build\n\n**CYCLES:**\n→ Full pass: complete game playthrough\n→ Regression: re-test fixed bugs only\n→ Spot check: sample after text updates\n→ Typically 2-3 cycles for a full release`, tip: "LQA without a test plan is just playing the game. Structure it." },
+      { title: "Bug Reporting", content: `**GOOD BUG REPORT:**\n→ **Location:** Menu > Settings > Audio (or coordinates/chapter)\n→ **Screenshot:** Mandatory. Circle the error.\n→ **Source text:** Original English\n→ **Current translation:** What's in the build\n→ **Suggested fix:** Correct translation\n→ **Error type:** Mistranslation / truncation / etc.\n→ **Severity:** Critical (blocks gameplay), Major (visible error), Minor (polish)\n\n**BAD BUG REPORT:** "Translation wrong in settings menu"\n→ Which setting? What language? What's wrong? What should it be?\n\n**PM TIP:** Create a template. Train testers on it. Reject incomplete reports.`, tip: "One well-written bug report saves 30 minutes of back-and-forth." },
+      { title: "Quality Metrics", content: `**TRACK OVER TIME:**\n→ Errors per 1K words, by language, by vendor\n→ Error distribution by type (accuracy vs. fluency vs. terminology)\n→ Fix rate per cycle\n→ Trend: improving or declining?\n\n**USE DATA TO:**\n→ Identify weak vendors → retrain or replace\n→ Identify weak content areas → improve source or reference\n→ Prove quality to clients → retention and upselling\n→ Benchmark → set targets for next project\n\n**CLIENT REPORTING:**\n→ Quality dashboard per language\n→ RAG status: Green (<threshold), Amber (at threshold), Red (above)\n→ Action plan for any Red languages`, tip: "Quality without data is opinion. Quality with data is leverage." }
+    ], quiz: [
+      { q: "LQA happens where?", o: ["In a spreadsheet only", "In-context in game builds", "In the CAT tool"], a: 1 },
+      { q: "MQM is a?", o: ["CAT tool", "Quality evaluation framework", "Bug tracker"], a: 1 },
+      { q: "Good bug report needs?", o: ["Just a description", "Location + screenshot + suggestion", "Only severity level"], a: 1 },
+    ], deliverable: "Create an LQA Bug Report Template and Quality Scoring Sheet with pass/fail thresholds." },
+    pt: { title: "QUALIDADE (LQA)", lessons: [
+      { title: "LQA vs QA de Software", content: `**LQA NÃO é teste de software.**\n\n**LQA checa:** Precisão, fluência, terminologia, estilo, contexto, cultural, limites, truncamento.\n\n**QA de software:** Crashes, performance, funcionalidade.\n\n**Testers precisam:** Fluência nativa + experiência com games + metodologia.\n\nLQA é IN-CONTEXT — na build real. Fora de contexto pega 70%. In-context pega 95%.`, tip: "Insista em LQA in-context. Maior investimento em qualidade." },
+      { title: "Modelos de Erro", content: `**MQM (Multidimensional Quality Metrics):**\n→ Framework padrão\n→ Categorias: Precisão, Fluência, Terminologia, Estilo, Locale, Design\n→ Severidade: Crítico, Maior, Menor\n\n**TIPOS (games):**\n→ Mistranslation, omissão, adição\n→ Gramática, ortografia, pontuação\n→ Terminologia errada\n→ Estilo inadequado\n→ Truncamento / overflow\n→ Texto não traduzido\n→ Variável corrompida\n→ Cultural inadequado\n\n**APROVAÇÃO:** Defina limiar antes. Ex: <2 críticos, <5 maiores por 1K.`, tip: "Defina modelo de erro e critérios no kickoff. Não durante LQA." },
+      { title: "Processo LQA", content: `**SETUP:**\n→ Defina: quais builds, idiomas, áreas\n→ Atribua testers (1 por idioma mínimo)\n→ Forneça: build traduzida, glossário, style guide, plano\n→ Acesso ao bug tracker\n\n**EXECUÇÃO:**\n→ Tester joga no idioma alvo\n→ Registra bugs: local, screenshot, tipo, severidade, sugestão\n→ PM faz triagem: válido? duplicado?\n→ Dev corrige → Verificar na próxima build\n\n**CICLOS:**\n→ Passada completa, regressão, spot check\n→ Tipicamente 2-3 ciclos por release`, tip: "LQA sem plano é só jogar o jogo. Estruture." },
+      { title: "Bug Reporting", content: `**BOM REPORT:**\n→ **Local:** Menu > Config > Áudio\n→ **Screenshot:** Obrigatório. Circule o erro.\n→ **Texto fonte:** Inglês original\n→ **Tradução atual:** O que está na build\n→ **Sugestão:** Tradução correta\n→ **Tipo de erro:** Mistranslation / truncamento\n→ **Severidade:** Crítico / Maior / Menor\n\n**RUIM:** "Tradução errada nas configs"\n\n**Crie template. Treine testers. Rejeite reports incompletos.**`, tip: "Um bom report economiza 30 min de vai-e-vem." },
+      { title: "Métricas de Qualidade", content: `**RASTREIE:**\n→ Erros por 1K por idioma, por vendor\n→ Distribuição por tipo\n→ Taxa de correção por ciclo\n→ Tendência: melhorando ou piorando?\n\n**USE DADOS PARA:**\n→ Identificar vendors fracos\n→ Identificar conteúdo problemático\n→ Provar qualidade ao cliente → retenção\n→ Benchmarking\n\n**PARA CLIENTE:**\n→ Dashboard por idioma\n→ RAG: Verde/Âmbar/Vermelho\n→ Plano de ação para Vermelhos`, tip: "Qualidade sem dados é opinião. Com dados é alavancagem." }
+    ], quiz: [
+      { q: "LQA acontece onde?", o: ["Só planilha", "In-context na build", "Na CAT tool"], a: 1 },
+      { q: "MQM é?", o: ["CAT tool", "Framework de qualidade", "Bug tracker"], a: 1 },
+      { q: "Bom bug report?", o: ["Só descrição", "Local + screenshot + sugestão", "Só severidade"], a: 1 },
+    ], deliverable: "Crie Template de Bug Report + Planilha de Scoring com limiares." }
+  },
+  // ═══ MODULE 8: AUDIO ═══
+  { icon: "🎙️", color: "#58a6ff",
+    en: { title: "AUDIO LOC", lessons: [
+      { title: "The Audio Pipeline", content: `**Script Prep** → Casting → Direction → Recording → Editing → QA → Implementation\n\n**Script prep:** Finalize translated script, add direction notes, mark emphasis, pronunciation guides, lip-sync timing.\n\n**This stream runs 2-4 weeks behind text.** You need the translated script BEFORE recording can start.`, tip: "Audio is the most expensive and least reversible stream. Get it right the first time." },
+      { title: "Casting & Direction", content: `**CASTING:**\n→ Client provides character descriptions and reference clips\n→ Studio provides 2-3 options per character\n→ Client approves casting before sessions begin\n→ Plan for: lead roles, supporting, NPC ensemble\n\n**DIRECTION:**\n→ Voice director (in-studio, native speaker) is essential\n→ They interpret the script, set tone, coach actors\n→ Provide: character bible, context clips, pronunciation guide\n→ The PM does NOT direct. You coordinate logistics.`, tip: "Never skip the voice director. Self-directed actors produce inconsistent results." },
+      { title: "Studio Logistics", content: `**BOOKING:**\n→ Book sessions 2-4 weeks in advance\n→ Factor: actor availability, studio hours, breaks\n→ Average output: 200-400 lines per 4-hour session\n→ Complex emotional scenes: half that speed\n\n**SPECS:**\n→ Sample rate: 48kHz / 24-bit (game standard)\n→ Format: WAV (uncompressed for delivery)\n→ Naming: match engine convention exactly\n→ Metadata: character, emotion, scene, take number\n\n**COSTS:**\n→ Actor fee (per hour or per session)\n→ Studio rental\n→ Director fee\n→ Engineer/editing\n→ Pickups (re-records) — budget 5-10% extra`, tip: "Confirm naming conventions with engineering BEFORE recording. Rename = re-do." },
+      { title: "Lip-Sync & Timing", content: `**LIP-SYNC METHODS:**\n→ **Free-length:** Target can be any length. Easiest.\n→ **Time-synced:** Match original duration ±10%. Moderate.\n→ **Lip-synced:** Match mouth movements exactly. Hardest.\n\n**CONSTRAINTS:**\n→ Languages expand differently in speech\n→ Japanese dialog is often shorter than English\n→ German and Portuguese tend to be longer\n→ Provide actors with timing reference (beep tracks)\n\n**IMPLEMENTATION:**\n→ Audio files linked to dialogue triggers in engine\n→ If timing is wrong, subtitles and audio desync\n→ QA must check audio in-context, not just files`, tip: "Time-sync issues found after recording = re-record. Prevention is everything." },
+      { title: "Audio QA & Delivery", content: `**QA CHECKS:**\n→ Audio plays for correct trigger\n→ No pops, clicks, background noise\n→ Correct character voice\n→ Emotion matches context\n→ Timing matches constraints\n→ Volume consistent across files\n→ Naming/metadata correct\n\n**DELIVERY:**\n→ Usually delivered per milestone (chapter, act)\n→ WAV masters + compressed versions per platform\n→ Include: delivery manifest, known issues, pickup list\n\n**PICKUPS:**\n→ Lines that need re-recording\n→ Track per language: line ID, reason, priority\n→ Schedule pickup sessions efficiently (batch per actor)`, tip: "A pickup list is normal. A huge pickup list means your prep was bad." }
+    ], quiz: [
+      { q: "Audio runs behind text by?", o: ["Same day", "2-4 weeks", "2-4 months"], a: 1 },
+      { q: "Standard game audio spec?", o: ["44.1kHz/16-bit MP3", "48kHz/24-bit WAV", "96kHz/32-bit FLAC"], a: 1 },
+      { q: "Who directs voice actors?", o: ["The PM", "The translator", "A native voice director"], a: 2 },
+    ], deliverable: "Create an Audio Production Plan for 1,000 lines in 5 languages, including schedule, cost estimate, and specs." },
+    pt: { title: "LOC DE ÁUDIO", lessons: [
+      { title: "Pipeline de Áudio", content: `**Prep de Script** → Casting → Direção → Gravação → Edição → QA → Implementação\n\n**Prep:** Script traduzido finalizado, notas de direção, ênfase, pronúncia, timing de lip-sync.\n\n**Este stream roda 2-4 semanas atrás do texto.** Precisa do script traduzido ANTES de gravar.`, tip: "Áudio é o stream mais caro e menos reversível. Acerte de primeira." },
+      { title: "Casting & Direção", content: `**CASTING:**\n→ Cliente fornece descrições e referências\n→ Estúdio oferece 2-3 opções por personagem\n→ Cliente aprova antes das sessões\n\n**DIREÇÃO:**\n→ Diretor de voz (no estúdio, nativo) é essencial\n→ Interpreta script, define tom, dirige atores\n→ Forneça: bible de personagens, referências, guia de pronúncia\n→ PM NÃO dirige. Você coordena logística.`, tip: "Nunca pule o diretor de voz. Atores sem direção = resultado inconsistente." },
+      { title: "Logística de Estúdio", content: `**RESERVA:**\n→ Agende 2-4 semanas antes\n→ Considere: disponibilidade, horas, intervalos\n→ Média: 200-400 linhas por sessão de 4h\n→ Cenas emocionais: metade\n\n**SPECS:**\n→ 48kHz / 24-bit (padrão games)\n→ WAV (sem compressão)\n→ Nomenclatura: exata do engine\n→ Metadata: personagem, emoção, cena, take\n\n**CUSTOS:**\n→ Fee do ator, estúdio, diretor, engenheiro/edição\n→ Pickups: 5-10% extra`, tip: "Confirme nomenclatura com engenharia ANTES de gravar." },
+      { title: "Lip-Sync & Timing", content: `**MÉTODOS:**\n→ **Livre:** Qualquer duração. Mais fácil.\n→ **Time-sync:** Mesma duração ±10%. Moderado.\n→ **Lip-sync:** Movimentos labiais exatos. Mais difícil.\n\n**RESTRIÇÕES:**\n→ Idiomas expandem diferente na fala\n→ Japonês geralmente mais curto que inglês\n→ Alemão e português tendem a ser mais longos\n→ Forneça referência de timing aos atores\n\n**IMPLEMENTAÇÃO:**\n→ Áudios linkados a triggers no engine\n→ Timing errado = desync de legenda\n→ QA deve checar in-context`, tip: "Problema de timing após gravar = regravar. Prevenção é tudo." },
+      { title: "QA de Áudio & Entrega", content: `**CHECAGENS:**\n→ Áudio toca no trigger correto\n→ Sem pops, clicks, ruído\n→ Voz correta do personagem\n→ Emoção combina com contexto\n→ Timing dentro das restrições\n→ Volume consistente\n→ Nomenclatura/metadata corretos\n\n**ENTREGA:**\n→ Por milestone (capítulo, ato)\n→ WAV masters + comprimidos por plataforma\n→ Inclua: manifesto, issues, lista de pickups\n\n**PICKUPS:**\n→ Linhas para regravar\n→ Rastreie: ID, razão, prioridade\n→ Agrupe sessões por ator`, tip: "Lista de pickups é normal. Lista enorme = prep ruim." }
+    ], quiz: [
+      { q: "Áudio roda atrás do texto por?", o: ["Mesmo dia", "2-4 semanas", "2-4 meses"], a: 1 },
+      { q: "Spec padrão de áudio?", o: ["44.1kHz/16-bit MP3", "48kHz/24-bit WAV", "96kHz/32-bit FLAC"], a: 1 },
+      { q: "Quem dirige atores?", o: ["O PM", "O tradutor", "Diretor de voz nativo"], a: 2 },
+    ], deliverable: "Crie Plano de Produção de Áudio para 1.000 linhas em 5 idiomas." }
+  },
+  // ═══ MODULE 9: FIREFIGHTING ═══
+  { icon: "🔥", color: "#f85149",
+    en: { title: "FIREFIGHTING", lessons: [
+      { title: "Top 10 Problems", content: `**THE CLASSICS:**\n\n1. Source text changes after translation ✦ Delta process\n2. Missing context for UI strings ✦ Push for builds/screenshots\n3. Vendor no-show/late delivery ✦ Always have backups\n4. Character limit violations ✦ Get limits before translation\n5. Variable/tag corruption ✦ Automated QA checks\n6. Wrong file version delivered ✦ Naming conventions + logs\n7. Glossary inconsistency ✦ Central TB + regular audits\n8. Client review adds scope ✦ Change order process\n9. Cultural issues discovered late ✦ Cultural review at kickoff\n10. Build not ready for LQA ✦ Decouple LQA schedule from dev`, tip: "80% of fires are preventable with good setup. The other 20% is why you earn your salary." },
+      { title: "Risk Management", content: `**IDENTIFY:** At kickoff, list everything that could go wrong.\n\n**ASSESS:** For each risk:\n→ Probability: High / Medium / Low\n→ Impact: High / Medium / Low\n→ Priority = Probability × Impact\n\n**MITIGATE:** For high-priority risks:\n→ Prevention action (what to do NOW)\n→ Contingency plan (what to do IF it happens)\n→ Owner (who is responsible)\n\n**MONITOR:** Review risk register weekly.\n\n**COMMON GAME LOC RISKS:**\n→ Source instability (high prob, high impact)\n→ Vendor availability (med prob, high impact)\n→ Technical integration issues (med prob, med impact)\n→ Budget overrun (low prob, high impact)`, tip: "A risk register isn't paperwork. It's your early warning system." },
+      { title: "Vendor Emergencies", content: `**SCENARIO: Vendor goes dark**\n→ Don't wait more than 4 hours past deadline without contact\n→ Escalation: 1) Direct message 2) Phone call 3) Activate backup\n→ If switching vendors: provide full context pack immediately\n→ Partial delivery is better than no delivery\n\n**SCENARIO: Quality disaster (entire delivery fails QA)**\n→ Assess scope: how many segments affected?\n→ Root cause: bad reference? wrong glossary? wrong vendor?\n→ Decision: patch (fix worst errors) or redo (full retranslation)?\n→ Communicate timeline impact to client IMMEDIATELY\n→ Don't blame the vendor to the client — own the solution\n\n**SCENARIO: Vendor capacity crunch**\n→ Split batch across 2-3 vendors\n→ Add consistency review step\n→ Brief ALL vendors identically`, tip: "The PM who says 'I've already activated the backup' is the PM who gets promoted." },
+      { title: "Crisis Communication", content: `**RULE 1: Bad news early.** Never hide a problem hoping it resolves itself.\n\n**RULE 2: Come with a plan.** "We have a problem AND here's how we're solving it."\n\n**RULE 3: Be specific.** "3 languages will be 2 days late" beats "there might be delays."\n\n**TEMPLATE:**\n→ What happened (factual, no blame)\n→ Impact (which languages, how many days, which content)\n→ Action taken (what you're doing NOW)\n→ Revised timeline (when it will be resolved)\n→ Prevention (how to avoid next time)\n\n**INTERNAL vs. EXTERNAL:**\n→ Internal: full transparency, all details\n→ External (client): solution-focused, professional, concise\n→ Never expose vendor problems to the client by name`, tip: "Clients forgive delays. They don't forgive surprises." },
+      { title: "Post-Crisis Review", content: `**WITHIN 48 HOURS of resolution:**\n\n**1. TIMELINE:** What happened, when, in what order?\n**2. ROOT CAUSE:** Why? Keep asking "why" 5 times.\n**3. RESPONSE:** What did we do? Was it effective?\n**4. IMPACT:** Cost, time, quality, relationship damage?\n**5. PREVENTION:** What changes prevent recurrence?\n\n**DOCUMENT IT.** Add to project post-mortem.\n\n**SHARE LEARNINGS:** Not to blame, but to improve.\n→ Did process fail? → Update process.\n→ Did tool fail? → Fix or replace.\n→ Did communication fail? → Change cadence/channel.\n→ Did vendor fail? → Performance review + backup plan.`, tip: "The crisis you learn from makes you stronger. The crisis you ignore makes you repeat it." }
+    ], quiz: [
+      { q: "First step when vendor goes dark?", o: ["Wait 24 hours", "Contact within 4 hours + activate backup", "Email the client"], a: 1 },
+      { q: "Bad news should be?", o: ["Delayed until resolved", "Delivered early with a plan", "Hidden from client"], a: 1 },
+      { q: "Root cause analysis asks 'why' how many times?", o: ["Once", "3 times", "5 times"], a: 2 },
+    ], deliverable: "Create a Risk Register template and a Crisis Communication template for a game loc project." },
+    pt: { title: "APAGAR INCÊNDIOS", lessons: [
+      { title: "Top 10 Problemas", content: `**OS CLÁSSICOS:**\n\n1. Fonte muda após tradução ✦ Processo delta\n2. Sem contexto para UI ✦ Peça builds/screenshots\n3. Vendor some/atrasa ✦ Sempre tenha backups\n4. Violação de limite ✦ Limites antes de traduzir\n5. Tag/variável corrompida ✦ QA automático\n6. Versão errada entregue ✦ Nomenclatura + logs\n7. Inconsistência de glossário ✦ TB central + auditorias\n8. Review do cliente adiciona escopo ✦ Change order\n9. Problema cultural descoberto tarde ✦ Review cultural no kickoff\n10. Build não pronta para LQA ✦ Desacople LQA de dev`, tip: "80% dos incêndios são preveníveis. Os outros 20% justificam seu salário." },
+      { title: "Gestão de Riscos", content: `**IDENTIFIQUE:** No kickoff, liste tudo que pode dar errado.\n\n**AVALIE:** Para cada risco:\n→ Probabilidade: Alta / Média / Baixa\n→ Impacto: Alto / Médio / Baixo\n→ Prioridade = Prob × Impacto\n\n**MITIGUE:** Para alta prioridade:\n→ Ação preventiva (o que fazer AGORA)\n→ Contingência (o que fazer SE acontecer)\n→ Responsável\n\n**MONITORE:** Revise semanalmente.\n\n**RISCOS COMUNS:**\n→ Instabilidade do fonte (alta prob, alto impacto)\n→ Disponibilidade de vendor (média, alto)\n→ Problemas de integração (média, médio)\n→ Estouro de budget (baixa, alto)`, tip: "Risk register não é burocracia. É seu sistema de alerta." },
+      { title: "Emergências com Vendor", content: `**CENÁRIO: Vendor some**\n→ Não espere mais de 4h do prazo sem contato\n→ Escalação: mensagem → telefone → ativar backup\n→ Se trocar: pack completo de contexto imediatamente\n→ Entrega parcial > nenhuma entrega\n\n**CENÁRIO: Qualidade desastrosa**\n→ Avalie: quantos segmentos?\n→ Causa raiz: referência? glossário? vendor?\n→ Decisão: patch (piores erros) ou redo (retraduzir)?\n→ Comunique impacto ao cliente IMEDIATAMENTE\n→ Não culpe vendor pro cliente — resolva\n\n**CENÁRIO: Crunch de capacidade**\n→ Divida entre 2-3 vendors\n→ Adicione revisão de consistência\n→ Faça briefing IDÊNTICO para todos`, tip: "O PM que diz 'já ativei o backup' é o PM que é promovido." },
+      { title: "Comunicação de Crise", content: `**REGRA 1:** Notícia ruim cedo. Nunca esconda.\n\n**REGRA 2:** Venha com plano. "Temos um problema E estamos resolvendo assim."\n\n**REGRA 3:** Seja específico. "3 idiomas atrasam 2 dias" > "pode atrasar."\n\n**TEMPLATE:**\n→ O que aconteceu (fatos, sem culpa)\n→ Impacto (idiomas, dias, conteúdo)\n→ Ação tomada (o que está fazendo AGORA)\n→ Novo prazo\n→ Prevenção\n\n**Interno:** Transparência total.\n**Externo:** Focado em solução, profissional.`, tip: "Clientes perdoam atrasos. Não perdoam surpresas." },
+      { title: "Review Pós-Crise", content: `**EM 48 HORAS:**\n\n**1. TIMELINE:** O que aconteceu, quando, em que ordem?\n**2. CAUSA RAIZ:** Por quê? Pergunte "por quê" 5 vezes.\n**3. RESPOSTA:** O que fizemos? Foi eficaz?\n**4. IMPACTO:** Custo, tempo, qualidade, relação?\n**5. PREVENÇÃO:** O que muda?\n\n**DOCUMENTE.** Adicione ao post-mortem.\n\n**COMPARTILHE:** Não pra culpar, pra melhorar.\n→ Processo falhou? → Atualize.\n→ Ferramenta falhou? → Conserte.\n→ Comunicação falhou? → Mude cadência.\n→ Vendor falhou? → Review + backup.`, tip: "Crise que ensina fortalece. Crise ignorada se repete." }
+    ], quiz: [
+      { q: "Vendor some. Primeiro passo?", o: ["Esperar 24h", "Contato em 4h + backup", "Email ao cliente"], a: 1 },
+      { q: "Notícia ruim deve ser?", o: ["Adiada até resolver", "Entregue cedo com plano", "Escondida"], a: 1 },
+      { q: "Análise de causa raiz pergunta 'por quê'?", o: ["1 vez", "3 vezes", "5 vezes"], a: 2 },
+    ], deliverable: "Crie Risk Register + Template de Comunicação de Crise." }
+  },
+  // ═══ MODULE 10: POST-DELIVERY & CAREER ═══
+  { icon: "🏆", color: "#d2a8ff",
+    en: { title: "POST-DELIVERY & CAREER", lessons: [
+      { title: "Post-Mortem", content: `**WITHIN 1 WEEK of project end:**\n\n**WHAT WENT WELL?**\n→ Processes, tools, people that exceeded expectations\n→ Wins to replicate\n\n**WHAT WENT WRONG?**\n→ Delays, quality issues, communication gaps\n→ Be honest. No blame, just facts.\n\n**WHAT TO CHANGE?**\n→ Concrete actions with owners and deadlines\n→ Process updates, tool changes, vendor changes\n\n**FORMAT:** 1-page max. Share with team AND client (edited version).\n\n**CLIENT VALUE:** Sharing a post-mortem shows maturity and builds trust for future projects.`, tip: "The PM who does post-mortems gets better every project. The PM who doesn't repeats mistakes forever." },
+      { title: "TM & Asset Maintenance", content: `**AFTER DELIVERY:**\n→ Clean TM: remove rejected segments, fix errors found in LQA\n→ Update glossary with new terms established during project\n→ Archive final versions of all reference materials\n→ Version-tag everything: "Project_v_FINAL_[date]"\n\n**FOR RETURNING CLIENTS:**\n→ TM = your competitive advantage\n→ Good TM = lower costs, faster turnaround, better consistency\n→ Dirty TM = propagated errors across projects\n→ Schedule quarterly TM maintenance sessions\n\n**KNOWLEDGE BASE:**\n→ Client preferences doc (likes, dislikes, quirks)\n→ Technical notes (file formats, integration, contacts)\n→ This is institutional knowledge. Document it.`, tip: "Your TM is a revenue-generating asset. Treat it like one." },
+      { title: "Account Growth", content: `**TURN ONE PROJECT INTO A RELATIONSHIP:**\n\n► **Proactive suggestions:** "Your game has 5 unsupported languages that your competitor covers."\n► **Quality reports:** Share metrics that prove value.\n► **Process improvements:** "We reduced turnaround 20% — here's how."\n► **New services:** LQA, audio, marketing, culturalization consulting.\n\n**UPSELLING OPPORTUNITIES:**\n→ Additional languages\n→ DLC/expansion loc\n→ Marketing/store page localization\n→ Cultural consulting\n→ Continuous loc retainer for live ops\n→ LQA services if they were doing it themselves\n\n**KEY METRIC:** Client retention rate. Cheaper to grow existing accounts than win new ones.`, tip: "The best sales pitch is a project delivered on time, on quality, on budget." },
+      { title: "Career Growth", content: `**THE PM CAREER LADDER:**\n\n📋 **Junior PM** — Supports projects, learns tools, handles small accounts.\n📊 **PM** — Owns full projects, manages vendors, client-facing.\n⚡ **Senior PM** — Complex/AAA projects, mentors juniors, process improvement.\n🌟 **Lead PM** — Multiple projects/accounts, team coordination.\n👑 **Loc Manager** — Owns a team, P&L responsibility, strategy.\n🏰 **Head of Loc** — Department leadership, technology, partnerships.\n\n**SKILLS TO DEVELOP:**\n→ Technical: APIs, automation, data analysis\n→ Business: pricing, negotiations, account management\n→ Leadership: mentoring, process design, stakeholder management\n→ Domain: game design knowledge, platform cert, audio production`, tip: "The PM who automates their routine work has time to develop strategic skills." },
+      { title: "Building Your Brand", content: `**STAND OUT IN THE INDUSTRY:**\n\n► **LinkedIn** — Post about loc, not just share articles. Your insights, your experience.\n► **Portfolio** — List shipped titles (respect NDAs). Show process, not just names.\n► **Certifications** — memoQ, Trados, PMP, GILT, LocWorld presentations.\n► **Community** — GALA, LocWorld, IGDA Localization SIG. Attend, speak, contribute.\n► **Teaching** — Write, present, mentor. Teaching sharpens your own thinking.\n\n**YOUR UNIQUE VALUE:**\n→ What combination of skills makes you rare?\n→ Technical PM + gaming + specific language pairs = niche\n→ Automation + operations + AAA experience = rare\n→ PhD + hands-on PM + AI tooling = unicorn territory\n\n**REMEMBER:** In loc, reputation is everything. Deliver well and people will find you.`, tip: "Your career is a project too. Scope it, plan it, execute it, review it." }
+    ], quiz: [
+      { q: "Post-mortem should be?", o: ["Blame-focused", "1 page with wins, issues, and actions", "Only shared internally"], a: 1 },
+      { q: "TM maintenance should happen?", o: ["Never after delivery", "Quarterly", "Only if client asks"], a: 1 },
+      { q: "Best upsell strategy?", o: ["Cold pitch new services", "Deliver great work first, then suggest", "Discount everything"], a: 1 },
+    ], deliverable: "Write your PM Career Plan: where you are now, where you want to be in 2 years, and 5 concrete actions to get there." },
+    pt: { title: "PÓS-ENTREGA & CARREIRA", lessons: [
+      { title: "Post-Mortem", content: `**EM 1 SEMANA após o projeto:**\n\n**O QUE DEU CERTO?**\n→ Processos, ferramentas, pessoas que superaram\n→ Vitórias para replicar\n\n**O QUE DEU ERRADO?**\n→ Atrasos, problemas de qualidade, gaps de comunicação\n→ Honestidade. Sem culpa, só fatos.\n\n**O QUE MUDAR?**\n→ Ações concretas com responsáveis e prazos\n\n**FORMATO:** Máx 1 página. Compartilhe com time E cliente.\n\n**Mostrar post-mortem ao cliente = maturidade e confiança.**`, tip: "PM que faz post-mortem melhora a cada projeto. PM que não faz repete erros." },
+      { title: "Manutenção de TM", content: `**APÓS ENTREGA:**\n→ Limpe TM: remova rejeitados, corrija erros do LQA\n→ Atualize glossário com novos termos\n→ Arquive versões finais de referências\n→ Tag de versão: "Projeto_v_FINAL_[data]"\n\n**PARA CLIENTES RECORRENTES:**\n→ TM = sua vantagem competitiva\n→ Boa TM = menor custo, mais rápido, mais consistente\n→ TM suja = erros propagados\n→ Manutenção trimestral\n\n**BASE DE CONHECIMENTO:**\n→ Preferências do cliente\n→ Notas técnicas\n→ Conhecimento institucional. Documente.`, tip: "Sua TM é um ativo que gera receita. Trate como tal." },
+      { title: "Crescimento de Conta", content: `**DE UM PROJETO PARA UM RELACIONAMENTO:**\n\n► **Sugestões proativas:** "Seu jogo não tem 5 idiomas que o concorrente cobre."\n► **Relatórios de qualidade:** Mostre métricas que provem valor.\n► **Melhorias de processo:** "Reduzimos turnaround em 20%."\n► **Novos serviços:** LQA, áudio, marketing, culturalização.\n\n**OPORTUNIDADES:**\n→ Idiomas adicionais, DLC, marketing, consultoria cultural\n→ Retainer para live ops\n→ LQA se faziam internamente\n\n**Retenção de cliente > aquisição de novos.**`, tip: "Melhor pitch de vendas: projeto entregue no prazo, qualidade e budget." },
+      { title: "Crescimento de Carreira", content: `**A ESCADA DO PM:**\n\n📋 **Junior** — Suporta projetos, aprende ferramentas.\n📊 **PM** — Dono de projetos, gerencia vendors, client-facing.\n⚡ **Sênior** — AAA, mentora, melhoria de processo.\n🌟 **Lead** — Múltiplos projetos, coordenação.\n👑 **Manager** — Time, P&L, estratégia.\n🏰 **Head** — Departamento, tecnologia, parcerias.\n\n**SKILLS:**\n→ Técnico: APIs, automação, dados\n→ Negócios: pricing, negociação, account mgmt\n→ Liderança: mentoria, processos, stakeholders\n→ Domínio: game design, cert, áudio`, tip: "PM que automatiza a rotina tem tempo pra desenvolver skills estratégicos." },
+      { title: "Construindo sua Marca", content: `**DESTAQUE-SE:**\n\n► **LinkedIn** — Poste sobre loc. Seus insights, sua experiência.\n► **Portfólio** — Liste títulos shipados (respeite NDAs).\n► **Certificações** — memoQ, Trados, PMP, LocWorld.\n► **Comunidade** — GALA, LocWorld, IGDA. Participe, apresente.\n► **Ensino** — Escreva, apresente, mentore.\n\n**SEU VALOR ÚNICO:**\n→ Que combinação te torna raro?\n→ PM técnico + games + pares de idiomas = nicho\n→ Automação + operações + AAA = raro\n→ PhD + PM hands-on + IA = unicórnio\n\n**Na loc, reputação é tudo.**`, tip: "Sua carreira é um projeto. Escope, planeje, execute, revise." }
+    ], quiz: [
+      { q: "Post-mortem deve ser?", o: ["Focado em culpa", "1 pág com vitórias, problemas e ações", "Só interno"], a: 1 },
+      { q: "Manutenção de TM?", o: ["Nunca após entrega", "Trimestral", "Só se cliente pedir"], a: 1 },
+      { q: "Melhor estratégia de upsell?", o: ["Pitch frio", "Entregue bem primeiro, depois sugira", "Desconte tudo"], a: 1 },
+    ], deliverable: "Escreva seu Plano de Carreira: onde está, onde quer estar em 2 anos, 5 ações concretas." }
+  },
+];
+
+const UI = {
+  en: { start: "START QUEST", cont: "CONTINUE", langBtn: "PT-BR", map: "WORLD MAP", next: "NEXT ▶", prev: "◀ BACK", done: "✦ DONE", xp: "XP", home: "MAP", quiz: "BOSS FIGHT", correct: "+50 XP!", wrong: "MISS!", reward: "QUEST REWARD", stats: "STATS", locked: "🔒", sub: "From Kickoff to Gold Master", totalXp: "Total XP", level: "Level", lessons: "Lessons", quizzes: "Quizzes", achieves: "Achievements", resetC: "Reset all progress?", reset: "RESET", close: "CLOSE", tipL: "💡 PRO TIP", tipH: "HIDE", bio: "Built by an operations lead with 10+ years shipping AAA game localization across 30+ languages.", mute: "🔇", unmute: "🔊", soon: "ALL MODULES COMPLETE!", games: "MINI-GAMES", play: "PLAY", matchT: "Match terms to definitions!", riskT: "Find the red flags!", speedT: "30 seconds — how many right?", found: "FOUND!", score: "SCORE", timeUp: "TIME'S UP!", startG: "START", flagsFound: "flags found" },
+  pt: { start: "INICIAR QUEST", cont: "CONTINUAR", langBtn: "EN", map: "MAPA DO MUNDO", next: "PRÓXIMO ▶", prev: "◀ VOLTAR", done: "✦ FEITO", xp: "XP", home: "MAPA", quiz: "BOSS FIGHT", correct: "+50 XP!", wrong: "ERROU!", reward: "RECOMPENSA", stats: "STATUS", locked: "🔒", sub: "Do Kickoff ao Gold Master", totalXp: "XP Total", level: "Nível", lessons: "Aulas", quizzes: "Quizzes", achieves: "Conquistas", resetC: "Resetar progresso?", reset: "RESETAR", close: "FECHAR", tipL: "💡 DICA PRO", tipH: "OCULTAR", bio: "Criado por um líder de operações com 10+ anos shipando localização AAA de games em 30+ idiomas.", mute: "🔇", unmute: "🔊", soon: "TODOS OS MÓDULOS COMPLETOS!", games: "MINI-GAMES", play: "JOGAR", matchT: "Combine termos com definições!", riskT: "Encontre as red flags!", speedT: "30 segundos — quantas acerta?", found: "ACHOU!", score: "PONTOS", timeUp: "TEMPO ESGOTADO!", startG: "COMEÇAR", flagsFound: "flags encontradas" }
+};
+
+function App() {
+  const [lang, setLang] = useState("en");
+  const [scr, setScr] = useState("title"); // title,map,lesson,quiz,games,termMatch,riskSpot,speedQuiz
+  const [mi, setMi] = useState(0);
+  const [li, setLi] = useState(0);
+  const [xp, setXp] = useState(0);
+  const [comp, setComp] = useState([]);
+  const [qzDone, setQzDone] = useState([]);
+  const [qzAns, setQzAns] = useState({});
+  const [achs, setAchs] = useState([]);
+  const [tip, setTip] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [lvlUp, setLvlUp] = useState(null);
+  const [stats, setStats] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [fade, setFade] = useState(true);
+  const [streak, setStreak] = useState(0);
+  // minigame states
+  const [mgSelected, setMgSelected] = useState(null);
+  const [mgMatches, setMgMatches] = useState({});
+  const [mgFlags, setMgFlags] = useState([]);
+  const [mgTimer, setMgTimer] = useState(30);
+  const [mgQi, setMgQi] = useState(0);
+  const [mgScore, setMgScore] = useState(0);
+  const [mgActive, setMgActive] = useState(false);
+  const [mgSpeedAns, setMgSpeedAns] = useState({});
+
+  const t = UI[lang];
+  const sfx = fn => { if (!muted) fn(); };
+
+  useEffect(() => { (async () => { const s = await db.load(); if (s) { setXp(s.xp||0); setComp(s.comp||[]); setQzDone(s.qzDone||[]); setAchs(s.achs||[]); setLang(s.lang||"en"); setMuted(s.muted||false); setStreak(s.streak||0); } setLoaded(true); })(); }, []);
+  useEffect(() => { if (loaded) db.save({ xp, comp, qzDone, achs, lang, muted, streak }); }, [xp, comp, qzDone, achs, lang, muted, streak, loaded]);
+
+  const showToast = (m, c = "#39d353") => { setToast({ m, c }); setTimeout(() => setToast(null), 1800); };
+  const unlock = useCallback((id) => { if (achs.includes(id)) return; const a = ACHIEVEMENTS.find(x => x.id === id); if (!a) return; setAchs(p => [...p, id]); setXp(p => p + 75); sfx(SFX.achieve); showToast(`${a.icon} ${a[lang]}`, "#e3b341"); }, [achs, lang, muted]);
+  const trans = cb => { setFade(false); setTimeout(() => { cb(); setFade(true); }, 200); };
+
+  const completeLesson = () => {
+    const k = `${mi}-${li}`; if (comp.includes(k)) return;
+    const nc = [...comp, k]; setComp(nc);
+    setXp(p => { const n = p + 25, ol = getLevel(p), nl = getLevel(n); if (nl > ol) { setTimeout(() => { setLvlUp(nl); sfx(SFX.levelUp); }, 300); if (nl >= 4) unlock("level_5"); } return n; });
+    sfx(SFX.xp); const ns = streak + 1; setStreak(ns);
+    if (nc.length === 1) unlock("first_lesson");
+    if (ns >= 5) unlock("five_streak");
+    if (nc.length >= 25) unlock("halfway");
+    const md = MODULES[mi][lang];
+    if (md.lessons.length > 1 && md.lessons.every((_, i) => nc.includes(`${mi}-${i}`))) {
+      setXp(p => p + 100); sfx(SFX.complete);
+      const aid = `mod_${mi + 1}`; if (ACHIEVEMENTS.find(a => a.id === aid)) unlock(aid);
+      if (mi === 9) unlock("all_modules");
+    }
+  };
+
+  const handleQuiz = (qi, ai) => {
+    if (qzAns[qi] !== undefined) return;
+    const md = MODULES[mi][lang], ok = md.quiz[qi].a === ai;
+    setQzAns(p => ({ ...p, [qi]: { a: ai, ok } }));
+    if (ok) { setXp(p => p + 50); sfx(SFX.correct); showToast(t.correct); } else { sfx(SFX.wrong); showToast(t.wrong, "#f85149"); }
+    const na = { ...qzAns, [qi]: { a: ai, ok } };
+    if (Object.keys(na).length === md.quiz.length) { if (Object.values(na).every(a => a.ok)) unlock("quiz_perfect"); if (!qzDone.includes(mi)) setQzDone(p => [...p, mi]); }
+  };
+
+  const resetAll = async () => { if (confirm(t.resetC)) { setXp(0); setComp([]); setQzDone([]); setAchs([]); setStreak(0); setScr("title"); await db.save({ xp: 0, comp: [], qzDone: [], achs: [], lang, muted, streak: 0 }); } };
+
+  if (!loaded) return <div style={{ background: "#0d1117", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}><p className="f" style={{ fontSize: 16, color: "#58a6ff" }}>LOADING...</p></div>;
+
+  const lp = getLvlProg(xp), ld = LEVELS[lp.level];
+  const totalL = MODULES.reduce((s, m) => s + m[lang].lessons.length, 0);
+  const fmt = tx => tx.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/►/g, '<span style="color:#39d353">►</span>').replace(/→/g, '<span style="color:#f0883e">→</span>').replace(/🚩/g, '<span style="color:#f85149">🚩</span>').replace(/✦/g, '<span style="color:#e3b341">✦</span>').replace(/□/g, '<span style="color:#484f58">□</span>');
+
+  const css = `@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');*{box-sizing:border-box;margin:0;padding:0}@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}@keyframes glow{0%,100%{box-shadow:0 0 8px rgba(57,211,83,.4)}50%{box-shadow:0 0 20px rgba(57,211,83,.8)}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes pop{0%{transform:scale(0)}60%{transform:scale(1.15)}100%{transform:scale(1)}}@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}.f{font-family:'Press Start 2P',monospace}.b{font-family:'Press Start 2P',monospace;font-size:13px;padding:10px 16px;border:3px solid;cursor:pointer;transition:all .15s;text-transform:uppercase;background:#21262d;color:#c9d1d9;border-color:#484f58}.b:hover{transform:translateY(-2px);filter:brightness(1.15)}.b:active{transform:translateY(1px)}.b:disabled{opacity:.3;cursor:not-allowed;transform:none!important}.c{border:3px solid #484f58;background:#161b22;padding:16px}.sc{overflow-y:auto;scrollbar-width:thin;scrollbar-color:#484f58 #0d1117}.sc::-webkit-scrollbar{width:6px}.sc::-webkit-scrollbar-thumb{background:#484f58}.qo{cursor:pointer;border:2px solid #484f58;padding:10px 14px;margin:6px 0;background:#161b22;transition:all .15s;font-family:'Press Start 2P',monospace;font-size:12px;color:#c9d1d9;line-height:1.9}.qo:hover{border-color:#58a6ff;background:#1a2332}.qc{border-color:#39d353!important;background:rgba(57,211,83,.12)!important;animation:glow .5s}.qw{border-color:#f85149!important;animation:shake .3s}.lc{font-family:'Press Start 2P',monospace;font-size:13px;line-height:2.3;color:#c9d1d9;white-space:pre-wrap}.lc strong{color:#58a6ff}.tp{border-left:4px solid #e3b341;background:rgba(227,179,65,.06);padding:12px 16px;margin-top:16px;animation:slideUp .3s}.dt{width:3px;background:repeating-linear-gradient(to bottom,#484f58 0,#484f58 4px,transparent 4px,transparent 8px);margin:0 auto;height:16px}.fi{animation:fadeIn .25s}.sl{position:fixed;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px);pointer-events:none;z-index:9999}.mg-card{border:2px solid #484f58;padding:8px 12px;cursor:pointer;background:#161b22;transition:all .2s;margin:4px 0}.mg-card:hover{border-color:#58a6ff}.mg-sel{border-color:#e3b341!important;background:rgba(227,179,65,.08)!important}.mg-found{border-color:#39d353!important;background:rgba(57,211,83,.1)!important}`;
+
+  const XP = ({ w = 90 }) => <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: w, height: 8, background: "#21262d", border: "2px solid #484f58" }}><div style={{ height: "100%", background: "linear-gradient(90deg,#39d353,#58a6ff)", width: `${Math.min((lp.cur / lp.need) * 100, 100)}%`, transition: "width .5s" }} /></div><span className="f" style={{ fontSize: 10, color: "#8b949e" }}>{lp.cur}/{lp.need}</span></div>;
+
+  const Top = ({ extra }) => <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 10px", background: "#161b22", borderBottom: "3px solid #21262d", flexWrap: "wrap", gap: 4 }}><div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 20 }}>{ld.icon}</span><div><div className="f" style={{ fontSize: 10, color: "#58a6ff" }}>LV.{lp.level + 1} {ld[lang]}</div><XP w={75} /></div></div><div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>{extra}<button className="b" onClick={() => setStats(true)} style={{ fontSize: 11, padding: "4px 6px" }}>📊</button><button className="b" onClick={() => setMuted(!muted)} style={{ fontSize: 11, padding: "4px 6px" }}>{muted ? t.mute : t.unmute}</button><button className="b" onClick={() => setLang(lang === "en" ? "pt" : "en")} style={{ fontSize: 11, padding: "4px 6px" }}>🌐 {t.langBtn}</button></div></div>;
+
+  // ═══ SCREENS ═══
+  const Title = () => <div className={fade ? "fi" : ""} style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, background: "radial-gradient(ellipse at center,#161b22,#0d1117 70%)", padding: 20 }}>
+    <div style={{ fontSize: 52, animation: "float 3s ease-in-out infinite" }}>🎮</div>
+    <h1 className="f" style={{ fontSize: "clamp(20px,5vw,32px)", color: "#58a6ff", textShadow: "3px 3px 0 #0d1117", textAlign: "center", letterSpacing: 3 }}>GAME LOC PM</h1>
+    <p className="f" style={{ fontSize: "clamp(10px,2.5vw,14px)", color: "#8b949e", textAlign: "center", lineHeight: 2 }}>{t.sub}</p>
+    {comp.length > 0 && <div className="f" style={{ fontSize: 11, color: "#39d353", background: "#161b22", padding: "4px 10px", border: "2px solid #21262d" }}>{ld.icon} LV.{lp.level + 1} — {xp} XP</div>}
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", marginTop: 8 }}>
+      <button className="b" onClick={() => { sfx(SFX.click); trans(() => setScr("map")); }} style={{ background: "#39d353", color: "#0d1117", borderColor: "#2ea043", fontSize: 14, padding: "12px 24px" }}>{comp.length > 0 ? t.cont : t.start}</button>
+      <button className="b" onClick={() => setLang(lang === "en" ? "pt" : "en")}>🌐 {t.langBtn}</button>
+    </div>
+    <p className="f" style={{ marginTop: 16, fontSize: 10, color: "#484f58", textAlign: "center", lineHeight: 2, maxWidth: 440 }}>{t.bio}</p>
+  </div>;
+
+  const Map = () => <div className={fade ? "fi" : ""} style={{ minHeight: "100vh", background: "#0d1117" }}>
+    <Top />
+    <div style={{ padding: "12px 10px 32px", maxWidth: 420, margin: "0 auto" }}>
+      <h2 className="f" style={{ fontSize: 16, color: "#c9d1d9", textAlign: "center", marginBottom: 14 }}>{t.map}</h2>
+      {MODULES.map((mod, i) => { const md = mod[lang], cc = md.lessons.filter((_, li2) => comp.includes(`${i}-${li2}`)).length, done = cc === md.lessons.length;
+        return <div key={i}><div onClick={() => { sfx(SFX.click); trans(() => { setMi(i); setLi(0); setTip(false); setQzAns({}); setScr("lesson"); }); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", background: "#161b22", border: `3px solid ${mod.color}`, cursor: "pointer", transition: "all .2s" }}>
+          <div style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, background: "#0d1117", border: `2px solid ${mod.color}`, flexShrink: 0 }}>{mod.icon}</div>
+          <div style={{ flex: 1 }}><div className="f" style={{ fontSize: 11, color: mod.color, lineHeight: 1.5 }}>{String(i + 1).padStart(2, "0")}. {md.title}</div>
+            <div style={{ marginTop: 2, display: "flex", gap: 2 }}>{md.lessons.map((_, li2) => <div key={li2} style={{ width: 6, height: 6, background: comp.includes(`${i}-${li2}`) ? "#39d353" : "#21262d", border: "1px solid #484f58" }} />)}</div>
+          </div><span className="f" style={{ fontSize: 10, color: done ? "#39d353" : mod.color }}>{done ? "✦" : "▶"}</span>
+        </div>{i < MODULES.length - 1 && <div className="dt" />}</div>; })}
+      {/* Mini-games button */}
+      <div style={{ marginTop: 20, textAlign: "center" }}>
+        <button className="b" onClick={() => { sfx(SFX.click); trans(() => setScr("games")); }} style={{ background: "#d2a8ff", color: "#0d1117", borderColor: "#d2a8ff", fontSize: 13, padding: "10px 20px" }}>🕹️ {t.games}</button>
+      </div>
+      <div className="f" style={{ fontSize: 10, color: "#39d353", textAlign: "center", marginTop: 12, lineHeight: 2 }}>{t.soon}</div>
+    </div>
+  </div>;
+
+  const Lesson = () => { const mod = MODULES[mi], md = mod[lang], les = md.lessons[li], tot = md.lessons.length, k = `${mi}-${li}`, dn = comp.includes(k);
+    return <div className={fade ? "fi" : ""} style={{ minHeight: "100vh", background: "#0d1117", display: "flex", flexDirection: "column" }}>
+      <Top extra={<button className="b" onClick={() => { sfx(SFX.click); trans(() => setScr("map")); }} style={{ fontSize: 11, padding: "4px 6px" }}>◀ {t.home}</button>} />
+      <div style={{ display: "flex", justifyContent: "center", gap: 4, padding: "6px 8px" }}>{md.lessons.map((_, i) => <div key={i} onClick={() => { setLi(i); setTip(false); }} style={{ width: 8, height: 8, cursor: "pointer", background: i === li ? mod.color : comp.includes(`${mi}-${i}`) ? "#39d353" : "#21262d", border: `2px solid ${i === li ? mod.color : "#484f58"}` }} />)}</div>
+      <div className="sc" style={{ flex: 1, padding: "10px 14px", maxWidth: 640, margin: "0 auto", width: "100%" }}>
+        <div className="f" style={{ fontSize: 10, color: "#8b949e", marginBottom: 2 }}>{mod.icon} {md.title} — {li + 1}/{tot}</div>
+        <h3 className="f" style={{ fontSize: 14, color: mod.color, marginBottom: 12, lineHeight: 1.8 }}>{les.title}</h3>
+        <div className="lc" dangerouslySetInnerHTML={{ __html: fmt(les.content) }} />
+        {les.tip && <div style={{ marginTop: 12 }}><button className="b" onClick={() => { setTip(!tip); sfx(SFX.click); }} style={{ color: "#e3b341", borderColor: "#e3b341", fontSize: 11, padding: "5px 9px" }}>{tip ? t.tipH : t.tipL}</button>{tip && <div className="tp"><p className="f" style={{ fontSize: 12, color: "#e3b341", lineHeight: 2.2 }}>{les.tip}</p></div>}</div>}
+      </div>
+      <div style={{ padding: "8px 10px", borderTop: "3px solid #21262d", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#161b22", flexWrap: "wrap", gap: 4 }}>
+        <button className="b" disabled={li === 0} onClick={() => { setLi(li - 1); setTip(false); sfx(SFX.click); }}>{t.prev}</button>
+        {!dn ? <button className="b" onClick={completeLesson} style={{ color: "#39d353", borderColor: "#39d353", animation: "pulse 1.5s infinite", fontSize: 12 }}>+25 {t.xp}</button> : <span className="f" style={{ fontSize: 11, color: "#39d353" }}>{t.done}</span>}
+        {li < tot - 1 ? <button className="b" onClick={() => { completeLesson(); setLi(li + 1); setTip(false); sfx(SFX.click); }} style={{ background: mod.color, color: "#0d1117", borderColor: mod.color }}>{t.next}</button>
+          : <button className="b" onClick={() => { completeLesson(); sfx(SFX.click); md.quiz.length ? trans(() => { setQzAns({}); setScr("quiz"); }) : trans(() => setScr("map")); }} style={{ background: "#d2a8ff", color: "#0d1117", borderColor: "#d2a8ff" }}>{md.quiz.length ? `⚔️ ${t.quiz}` : `◀ ${t.home}`}</button>}
+      </div>
+    </div>; };
+
+  const Quiz = () => { const mod = MODULES[mi], md = mod[lang], allD = Object.keys(qzAns).length === md.quiz.length;
+    return <div className={fade ? "fi" : ""} style={{ minHeight: "100vh", background: "#0d1117", padding: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 6 }}>
+        <button className="b" onClick={() => { sfx(SFX.click); trans(() => setScr("lesson")); }}>{t.prev}</button>
+        <h2 className="f" style={{ fontSize: 14, color: mod.color }}>⚔️ {t.quiz}</h2><XP w={65} />
+      </div>
+      <div style={{ maxWidth: 540, margin: "0 auto" }}>
+        {md.quiz.map((q, qi) => <div key={qi} className="c" style={{ marginBottom: 12, animation: `slideUp .3s ${qi * .07}s both` }}>
+          <p className="f" style={{ fontSize: 12, color: "#c9d1d9", lineHeight: 2, marginBottom: 8 }}>{q.q}</p>
+          {q.o.map((opt, oi) => { let cl = "qo"; if (qzAns[qi] !== undefined) { if (oi === q.a) cl += " qc"; else if (oi === qzAns[qi].a && !qzAns[qi].ok) cl += " qw"; } return <div key={oi} className={cl} onClick={() => handleQuiz(qi, oi)}>{String.fromCharCode(65 + oi)}) {opt}</div>; })}
+        </div>)}
+        {allD && md.deliverable && <div className="c" style={{ borderColor: "#e3b341", animation: "slideUp .4s", marginTop: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><span style={{ fontSize: 22 }}>🎁</span><h3 className="f" style={{ fontSize: 13, color: "#e3b341" }}>{t.reward}</h3></div>
+          <p className="f" style={{ fontSize: 12, color: "#c9d1d9", lineHeight: 2.2 }}>{md.deliverable}</p>
+          <button className="b" onClick={() => { sfx(SFX.click); trans(() => setScr("map")); }} style={{ marginTop: 10, background: "#e3b341", color: "#0d1117", borderColor: "#d29922" }}>◀ {t.home}</button>
+        </div>}
+      </div>
+    </div>; };
+
+  // ═══ MINI-GAMES HUB ═══
+  const GamesHub = () => <div className={fade ? "fi" : ""} style={{ minHeight: "100vh", background: "#0d1117", padding: 14 }}>
+    <Top extra={<button className="b" onClick={() => { sfx(SFX.click); trans(() => setScr("map")); }} style={{ fontSize: 11, padding: "4px 6px" }}>◀ {t.home}</button>} />
+    <h2 className="f" style={{ fontSize: 17, color: "#d2a8ff", textAlign: "center", margin: "16px 0" }}>🕹️ {t.games}</h2>
+    <div style={{ maxWidth: 400, margin: "0 auto", display: "flex", flexDirection: "column", gap: 12 }}>
+      {[
+        { id: "termMatch", icon: "📚", color: "#58a6ff", en: "TERM MATCH", pt: "MATCH DE TERMOS", desc: lang === "en" ? "Match loc terms to definitions" : "Combine termos com definições" },
+        { id: "riskSpot", icon: "🔍", color: "#f85149", en: "RISK SPOTTER", pt: "DETECTOR DE RISCOS", desc: lang === "en" ? "Find red flags in a client email" : "Encontre red flags no email do cliente" },
+        { id: "speedQuiz", icon: "⏱️", color: "#e3b341", en: "SPEED ROUND", pt: "RODADA RÁPIDA", desc: lang === "en" ? "30 seconds — how many right?" : "30 segundos — quantas acerta?" },
+      ].map(g => <div key={g.id} onClick={() => { sfx(SFX.click); if (g.id === "termMatch") { setMgSelected(null); setMgMatches({}); trans(() => setScr("termMatch")); } else if (g.id === "riskSpot") { setMgFlags([]); trans(() => setScr("riskSpot")); } else { setMgTimer(30); setMgQi(0); setMgScore(0); setMgActive(false); setMgSpeedAns({}); trans(() => setScr("speedQuiz")); } }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", background: "#161b22", border: `3px solid ${g.color}`, cursor: "pointer", transition: "all .2s" }}>
+        <span style={{ fontSize: 28 }}>{g.icon}</span>
+        <div><div className="f" style={{ fontSize: 13, color: g.color }}>{g[lang === "en" ? "en" : "pt"]}</div><div className="f" style={{ fontSize: 10, color: "#8b949e", marginTop: 4, lineHeight: 1.8 }}>{g.desc}</div></div>
+        <span className="f" style={{ fontSize: 12, color: g.color, marginLeft: "auto" }}>▶</span>
+      </div>)}
+    </div>
+  </div>;
+
+  // ═══ TERM MATCH GAME ═══
+  const TermMatch = () => {
+    const data = MINIGAMES.termMatch[lang];
+    const shuffledDefs = [...data.pairs].sort(() => 0.5 - Math.random());
+    const [defs] = useState(shuffledDefs);
+    const allMatched = Object.keys(mgMatches).length === data.pairs.length;
+    const handleTermClick = (i) => { if (mgMatches[i] !== undefined) return; setMgSelected(mgSelected === i ? null : i); sfx(SFX.click); };
+    const handleDefClick = (defText) => {
+      if (mgSelected === null) return;
+      const pair = data.pairs[mgSelected];
+      if (pair.def === defText) { setMgMatches(p => ({ ...p, [mgSelected]: true })); sfx(SFX.correct); setXp(p => p + 15); showToast("+15 XP!", "#39d353"); setMgSelected(null);
+        if (Object.keys(mgMatches).length + 1 === data.pairs.length) { unlock("minigame_1"); setXp(p => p + 50); setTimeout(() => showToast("+50 BONUS!", "#e3b341"), 500); }
+      } else { sfx(SFX.wrong); showToast(t.wrong, "#f85149"); }
+    };
+    return <div className={fade ? "fi" : ""} style={{ minHeight: "100vh", background: "#0d1117", padding: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 6 }}>
+        <button className="b" onClick={() => { sfx(SFX.click); trans(() => setScr("games")); }}>◀ {t.prev}</button>
+        <h2 className="f" style={{ fontSize: 14, color: "#58a6ff" }}>📚 {data.title}</h2><XP w={60} />
+      </div>
+      <p className="f" style={{ fontSize: 11, color: "#8b949e", textAlign: "center", marginBottom: 10 }}>{data.desc}</p>
+      <div style={{ maxWidth: 600, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div>{data.pairs.map((p, i) => <div key={i} className={`mg-card ${mgMatches[i] !== undefined ? "mg-found" : mgSelected === i ? "mg-sel" : ""}`} onClick={() => handleTermClick(i)}>
+          <span className="f" style={{ fontSize: 12, color: mgMatches[i] !== undefined ? "#39d353" : mgSelected === i ? "#e3b341" : "#58a6ff" }}>{p.term} {mgMatches[i] !== undefined ? "✓" : ""}</span>
+        </div>)}</div>
+        <div>{defs.map((p, i) => <div key={i} className="mg-card" onClick={() => handleDefClick(p.def)} style={{ opacity: Object.entries(mgMatches).some(([k]) => data.pairs[k].def === p.def) ? 0.3 : 1 }}>
+          <span className="f" style={{ fontSize: 10, color: "#c9d1d9", lineHeight: 1.8 }}>{p.def}</span>
+        </div>)}</div>
+      </div>
+      {allMatched && <div style={{ textAlign: "center", marginTop: 16 }}><button className="b" onClick={() => { sfx(SFX.click); trans(() => setScr("games")); }} style={{ background: "#39d353", color: "#0d1117", borderColor: "#2ea043" }}>◀ {t.home}</button></div>}
+    </div>;
+  };
+
+  // ═══ RISK SPOTTER GAME ═══
+  const RiskSpot = () => {
+    const data = MINIGAMES.riskSpotter[lang];
+    const allFound = mgFlags.length === data.flags.length;
+    const handleFlag = (i) => { if (mgFlags.includes(i)) return; setMgFlags(p => [...p, i]); sfx(SFX.correct); setXp(p => p + 20); showToast(`${t.found} +20 XP`, "#39d353");
+      if (mgFlags.length + 1 === data.flags.length) { unlock("minigame_2"); setXp(p => p + 50); setTimeout(() => showToast("+50 BONUS!", "#e3b341"), 500); }
+    };
+    return <div className={fade ? "fi" : ""} style={{ minHeight: "100vh", background: "#0d1117", padding: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 6 }}>
+        <button className="b" onClick={() => { sfx(SFX.click); trans(() => setScr("games")); }}>◀ {t.prev}</button>
+        <h2 className="f" style={{ fontSize: 14, color: "#f85149" }}>🔍 {data.title}</h2>
+        <span className="f" style={{ fontSize: 12, color: "#39d353" }}>{mgFlags.length}/{data.flags.length}</span>
+      </div>
+      <div className="c" style={{ maxWidth: 560, margin: "0 auto 16px", borderColor: "#484f58" }}>
+        <p className="f" style={{ fontSize: 11, color: "#c9d1d9", lineHeight: 2.2, whiteSpace: "pre-wrap" }}>{data.scenario}</p>
+      </div>
+      <div style={{ maxWidth: 560, margin: "0 auto" }}>
+        <p className="f" style={{ fontSize: 11, color: "#8b949e", marginBottom: 8 }}>{data.desc}</p>
+        {data.flags.map((f, i) => <div key={i} className={`mg-card ${mgFlags.includes(i) ? "mg-found" : ""}`} onClick={() => handleFlag(i)} style={{ cursor: mgFlags.includes(i) ? "default" : "pointer" }}>
+          <div className="f" style={{ fontSize: 11, color: mgFlags.includes(i) ? "#39d353" : "#f85149" }}>{mgFlags.includes(i) ? "✓ " : "🚩 "}{f.text}</div>
+          {mgFlags.includes(i) && <div className="f" style={{ fontSize: 10, color: "#8b949e", marginTop: 4, lineHeight: 1.8 }}>{f[lang] || f.en}</div>}
+        </div>)}
+        {allFound && <div style={{ textAlign: "center", marginTop: 14 }}><button className="b" onClick={() => { sfx(SFX.click); trans(() => setScr("games")); }} style={{ background: "#39d353", color: "#0d1117", borderColor: "#2ea043" }}>◀ {t.home}</button></div>}
+      </div>
+    </div>;
+  };
+
+  // ═══ SPEED QUIZ GAME ═══
+  const SpeedQuiz = () => {
+    const data = MINIGAMES.speedQuiz[lang];
+    useEffect(() => { if (!mgActive) return; if (mgTimer <= 0) return; const iv = setInterval(() => setMgTimer(p => p - 1), 1000); return () => clearInterval(iv); }, [mgActive, mgTimer]);
+    const done = mgTimer <= 0 || mgQi >= data.questions.length;
+    const handleAns = (ai) => { if (done || mgSpeedAns[mgQi] !== undefined) return; const ok = data.questions[mgQi].a === ai; setMgSpeedAns(p => ({ ...p, [mgQi]: ok }));
+      if (ok) { setMgScore(p => p + 1); sfx(SFX.correct); setXp(p => p + 25); } else { sfx(SFX.wrong); }
+      setTimeout(() => { if (mgQi + 1 < data.questions.length && mgTimer > 0) setMgQi(p => p + 1); }, 400);
+    };
+    if (done && mgScore >= 8 && !achs.includes("speed_demon")) unlock("speed_demon");
+    return <div className={fade ? "fi" : ""} style={{ minHeight: "100vh", background: "#0d1117", padding: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 6 }}>
+        <button className="b" onClick={() => { sfx(SFX.click); trans(() => setScr("games")); }}>◀ {t.prev}</button>
+        <h2 className="f" style={{ fontSize: 14, color: "#e3b341" }}>⏱️ {data.title}</h2>
+        <span className="f" style={{ fontSize: 16, color: mgTimer <= 5 ? "#f85149" : "#e3b341" }}>{mgTimer}s</span>
+      </div>
+      {!mgActive && !done && <div style={{ textAlign: "center", marginTop: 40 }}>
+        <p className="f" style={{ fontSize: 12, color: "#c9d1d9", marginBottom: 16 }}>{data.desc}</p>
+        <button className="b" onClick={() => { setMgActive(true); sfx(SFX.click); }} style={{ background: "#e3b341", color: "#0d1117", borderColor: "#d29922", fontSize: 16, padding: "14px 28px" }}>{t.startG}</button>
+      </div>}
+      {mgActive && !done && <div style={{ maxWidth: 480, margin: "0 auto" }}>
+        <div className="f" style={{ fontSize: 11, color: "#8b949e", marginBottom: 6 }}>Q{mgQi + 1}/{data.questions.length} — {t.score}: {mgScore}</div>
+        <div className="c" style={{ marginBottom: 12 }}>
+          <p className="f" style={{ fontSize: 13, color: "#c9d1d9", lineHeight: 2 }}>{data.questions[mgQi].q}</p>
+        </div>
+        {data.questions[mgQi].o.map((o, oi) => {
+          let st = {}; if (mgSpeedAns[mgQi] !== undefined) { if (oi === data.questions[mgQi].a) st = { borderColor: "#39d353", background: "rgba(57,211,83,.1)" }; else if (mgSpeedAns[mgQi] === false && oi !== data.questions[mgQi].a) st = { borderColor: "#f85149" }; }
+          return <div key={oi} className="qo" style={st} onClick={() => handleAns(oi)}>{String.fromCharCode(65 + oi)}) {o}</div>;
+        })}
+      </div>}
+      {done && <div style={{ textAlign: "center", marginTop: 30 }}>
+        <div style={{ fontSize: 48, marginBottom: 12 }}>{mgScore >= 8 ? "🏆" : mgScore >= 5 ? "⭐" : "💪"}</div>
+        <h3 className="f" style={{ fontSize: 18, color: "#e3b341", marginBottom: 8 }}>{t.timeUp}</h3>
+        <p className="f" style={{ fontSize: 14, color: "#c9d1d9" }}>{t.score}: {mgScore}/{data.questions.length}</p>
+        <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 16 }}>
+          <button className="b" onClick={() => { setMgTimer(30); setMgQi(0); setMgScore(0); setMgActive(false); setMgSpeedAns({}); sfx(SFX.click); }} style={{ background: "#e3b341", color: "#0d1117", borderColor: "#d29922" }}>↻ RETRY</button>
+          <button className="b" onClick={() => { sfx(SFX.click); trans(() => setScr("games")); }}>◀ {t.home}</button>
+        </div>
+      </div>}
+    </div>;
+  };
+
+  // ═══ MODALS ═══
+  const Stats = () => stats && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", zIndex: 250, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }} onClick={() => setStats(false)}>
+    <div className="c sc" style={{ maxWidth: 380, width: "100%", animation: "slideUp .3s", maxHeight: "88vh" }} onClick={e => e.stopPropagation()}>
+      <h2 className="f" style={{ fontSize: 16, color: "#58a6ff", marginBottom: 14, textAlign: "center" }}>📊 {t.stats}</h2>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+        {[{ l: t.totalXp, v: xp, c: "#e3b341" }, { l: t.level, v: `${lp.level + 1} ${ld[lang]}`, c: "#58a6ff" }, { l: t.lessons, v: `${comp.length}/${totalL}`, c: "#39d353" }, { l: t.quizzes, v: qzDone.length, c: "#d2a8ff" }].map((s, i) =>
+          <div key={i} style={{ background: "#0d1117", padding: 8, border: "2px solid #21262d", textAlign: "center" }}>
+            <div className="f" style={{ fontSize: 10, color: "#8b949e", marginBottom: 3 }}>{s.l}</div>
+            <div className="f" style={{ fontSize: 12, color: s.c }}>{s.v}</div>
+          </div>)}
+      </div>
+      <h3 className="f" style={{ fontSize: 12, color: "#e3b341", marginBottom: 8 }}>{t.achieves}</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, marginBottom: 12 }}>
+        {ACHIEVEMENTS.map(a => { const u = achs.includes(a.id); return <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 5, padding: 5, background: u ? "rgba(227,179,65,.05)" : "#0d1117", border: `2px solid ${u ? "#e3b341" : "#21262d"}`, opacity: u ? 1 : .3 }}>
+          <span style={{ fontSize: 18 }}>{u ? a.icon : "❓"}</span>
+          <span className="f" style={{ fontSize: 6, color: u ? "#c9d1d9" : "#484f58", lineHeight: 1.6 }}>{u ? a[lang] : "???"}</span>
+        </div>; })}
+      </div>
+      <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+        <button className="b" onClick={() => setStats(false)} style={{ background: "#58a6ff", color: "#0d1117", borderColor: "#58a6ff" }}>{t.close}</button>
+        <button className="b" onClick={resetAll} style={{ background: "#f85149", color: "#0d1117", borderColor: "#da3633", fontSize: 11 }}>{t.reset}</button>
+      </div>
+    </div>
+  </div>;
+
+  const LvlUp = () => lvlUp !== null && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.85)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setLvlUp(null)}>
+    <div style={{ textAlign: "center", animation: "pop .5s" }}><div style={{ fontSize: 52, animation: "float 2s infinite" }}>{LEVELS[lvlUp].icon}</div>
+      <h2 className="f" style={{ fontSize: 20, color: "#e3b341", marginTop: 12 }}>LEVEL UP!</h2>
+      <p className="f" style={{ fontSize: 13, color: "#c9d1d9", marginTop: 8 }}>LV.{lvlUp + 1} — {LEVELS[lvlUp][lang]}</p>
+      <button className="b" onClick={() => setLvlUp(null)} style={{ marginTop: 14, background: "#e3b341", color: "#0d1117", borderColor: "#d29922" }}>{t.close}</button>
+    </div>
+  </div>;
+
+  const Toast = () => toast && <div style={{ position: "fixed", bottom: 18, left: "50%", transform: "translateX(-50%)", zIndex: 200, animation: "slideUp .3s" }}>
+    <div className="f" style={{ fontSize: 13, padding: "8px 18px", background: toast.c, color: "#0d1117", border: `3px solid ${toast.c}` }}>{toast.m}</div>
+  </div>;
+
+  return <div style={{ background: "#0d1117", minHeight: "100vh" }}>
+    <style>{css}</style><div className="sl" />
+    {scr === "title" && <Title />}{scr === "map" && <Map />}{scr === "lesson" && <Lesson />}{scr === "quiz" && <Quiz />}
+    {scr === "games" && <GamesHub />}{scr === "termMatch" && <TermMatch />}{scr === "riskSpot" && <RiskSpot />}{scr === "speedQuiz" && <SpeedQuiz />}
+    <Toast /><LvlUp /><Stats />
+  </div>;
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(App));
+</script>
+</body>
+</html>
